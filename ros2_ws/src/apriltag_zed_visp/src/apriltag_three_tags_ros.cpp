@@ -1,0 +1,505 @@
+#include <iostream>
+#include <iomanip>
+#include <cmath>
+#include <vector>
+#include <deque>
+#include <algorithm>
+#include <memory>
+#include <chrono>
+#include <mutex>
+
+#include <opencv2/opencv.hpp>
+#include <opencv2/aruco.hpp>
+#include <opencv2/calib3d.hpp>
+#include <sl/Camera.hpp>
+
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "tf2/LinearMath/Quaternion.hpp"
+#include "tf2/LinearMath/Matrix3x3.hpp"
+
+using namespace std;
+using namespace cv;
+using namespace std::chrono_literals;
+
+const double TAG_SIZE = 0.06;
+const int BASE_TAG_ID_0 = 0;
+const int BASE_TAG_ID_1 = 1;
+const int TARGET_TAG_ID = 2;
+const int ROS_DOMAIN_ID = 36;
+const string TOPIC_NAME = "Trace5_zed_relative";
+
+const double ID0_TO_ID1_X = 0.1587;
+const double ID0_TO_ID1_Y = 0.000;
+const double ID0_TO_ID1_Z = 0.000;
+
+class AdvancedFilter {
+private:
+    deque<double> history;
+    deque<double> history_x;
+    deque<double> history_y;
+    deque<double> history_z;
+    deque<double> history_rx;
+    deque<double> history_ry;
+    deque<double> history_rz;
+    int max_size;
+    double alpha;
+    double last_filtered;
+    double last_x, last_y, last_z;
+    double last_rx, last_ry, last_rz;
+    bool initialized;
+    mutex mtx;
+
+public:
+    AdvancedFilter(int size = 60, double smooth_factor = 0.1) 
+        : max_size(size), alpha(smooth_factor), initialized(false) {
+        last_filtered = last_x = last_y = last_z = 0;
+        last_rx = last_ry = last_rz = 0;
+    }
+
+    void add(double x, double y, double z, double rx, double ry, double rz, double distance) {
+        lock_guard<mutex> lock(mtx);
+        
+        if (!initialized) {
+            last_filtered = distance;
+            last_x = x; last_y = y; last_z = z;
+            last_rx = rx; last_ry = ry; last_rz = rz;
+            initialized = true;
+        }
+
+        history.push_back(distance);
+        history_x.push_back(x);
+        history_y.push_back(y);
+        history_z.push_back(z);
+        history_rx.push_back(rx);
+        history_ry.push_back(ry);
+        history_rz.push_back(rz);
+
+        if ((int)history.size() > max_size) {
+            history.pop_front();
+            history_x.pop_front();
+            history_y.pop_front();
+            history_z.pop_front();
+            history_rx.pop_front();
+            history_ry.pop_front();
+            history_rz.pop_front();
+        }
+    }
+
+    double getTrimmedMean(const deque<double>& data, double trim_percent = 0.25) {
+        if (data.empty()) return 0;
+        deque<double> sorted = data;
+        sort(sorted.begin(), sorted.end());
+        
+        int trim_count = (int)(sorted.size() * trim_percent / 2);
+        double sum = 0;
+        int count = 0;
+        
+        for (int i = trim_count; i < (int)sorted.size() - trim_count; i++) {
+            sum += sorted[i];
+            count++;
+        }
+        
+        if (count > 0) return sum / count;
+        return sorted[sorted.size() / 2];
+    }
+
+    double lowPass(double new_val, double last_val, double a) {
+        return a * new_val + (1 - a) * last_val;
+    }
+
+    void getSmoothed(double& x, double& y, double& z, 
+                    double& rx, double& ry, double& rz, double& distance) {
+        lock_guard<mutex> lock(mtx);
+        
+        if (history.empty()) {
+            x = y = z = rx = ry = rz = distance = 0;
+            return;
+        }
+
+        distance = lowPass(getTrimmedMean(history, 0.25), last_filtered, alpha);
+        last_filtered = distance;
+
+        x = lowPass(getTrimmedMean(history_x, 0.25), last_x, alpha);
+        last_x = x;
+        y = lowPass(getTrimmedMean(history_y, 0.25), last_y, alpha);
+        last_y = y;
+        z = lowPass(getTrimmedMean(history_z, 0.25), last_z, alpha);
+        last_z = z;
+
+        rx = lowPass(getTrimmedMean(history_rx, 0.25), last_rx, alpha);
+        last_rx = rx;
+        ry = lowPass(getTrimmedMean(history_ry, 0.25), last_ry, alpha);
+        last_ry = ry;
+        rz = lowPass(getTrimmedMean(history_rz, 0.25), last_rz, alpha);
+        last_rz = rz;
+    }
+
+    void clear() {
+        lock_guard<mutex> lock(mtx);
+        history.clear();
+        history_x.clear();
+        history_y.clear();
+        history_z.clear();
+        history_rx.clear();
+        history_ry.clear();
+        history_rz.clear();
+        initialized = false;
+    }
+
+    bool isStable() {
+        lock_guard<mutex> lock(mtx);
+        return history.size() >= max_size * 0.6;
+    }
+};
+
+Mat rvecToMatrix(const Vec3d& rvec) {
+    Mat R;
+    Rodrigues(rvec, R);
+    return R;
+}
+
+Vec3d matrixToRvec(const Mat& R) {
+    Vec3d rvec;
+    Rodrigues(R, rvec);
+    return rvec;
+}
+
+Mat inverseTransform(const Mat& R, const Mat& t) {
+    Mat T = Mat::eye(4, 4, CV_64F);
+    R.copyTo(T(Rect(0, 0, 3, 3)));
+    t.copyTo(T(Rect(3, 0, 1, 3)));
+    return T.inv();
+}
+
+void transformPoint(const Mat& T, double x, double y, double z, 
+                   double& ox, double& oy, double& oz) {
+    Mat p = (Mat_<double>(4, 1) << x, y, z, 1.0);
+    Mat tp = T * p;
+    ox = tp.at<double>(0, 0);
+    oy = tp.at<double>(1, 0);
+    oz = tp.at<double>(2, 0);
+}
+
+Mat multiplyTransforms(const Mat& T1, const Mat& T2) {
+    return T1 * T2;
+}
+
+void extractTransform(const Mat& T, Mat& R, Mat& t) {
+    R = T(Rect(0, 0, 3, 3)).clone();
+    t = T(Rect(3, 0, 1, 3)).clone();
+}
+
+class ThreeTagSystemNode : public rclcpp::Node {
+public:
+    ThreeTagSystemNode() : Node("three_tag_system") {
+        publisher_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(TOPIC_NAME, 10);
+        RCLCPP_INFO(this->get_logger(), "三标签基准系统已启动");
+        RCLCPP_INFO(this->get_logger(), "DOMAIN ID: %d", ROS_DOMAIN_ID);
+        RCLCPP_INFO(this->get_logger(), "话题名: %s", TOPIC_NAME.c_str());
+        RCLCPP_INFO(this->get_logger(), "基准标签: ID0 (主), ID1 (辅助)");
+        RCLCPP_INFO(this->get_logger(), "目标标签: ID2");
+    }
+
+    void publishRelative(double x, double y, double z, 
+                        double rx, double ry, double rz,
+                        double distance, bool id0_found, bool id1_found, bool id2_found) {
+        auto message = std_msgs::msg::Float64MultiArray();
+        message.data = {
+            x, y, z, distance,
+            rx, ry, rz,
+            id0_found ? 1.0 : 0.0,
+            id1_found ? 1.0 : 0.0,
+            id2_found ? 1.0 : 0.0
+        };
+        publisher_->publish(message);
+    }
+
+private:
+    rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr publisher_;
+};
+
+void draw3DAxis(Mat& image, const Vec3d& rvec, const Vec3d& tvec, 
+                const Mat& camera_matrix, const Mat& dist_coeffs, float length) {
+    vector<Point3f> axis_points = {
+        Point3f(0, 0, 0),
+        Point3f(length, 0, 0),
+        Point3f(0, length, 0),
+        Point3f(0, 0, length)
+    };
+
+    vector<Point2f> image_points;
+    projectPoints(axis_points, rvec, tvec, camera_matrix, dist_coeffs, image_points);
+
+    if (image_points.size() >= 4) {
+        arrowedLine(image, image_points[0], image_points[1], Scalar(0, 0, 255), 2);
+        arrowedLine(image, image_points[0], image_points[2], Scalar(0, 255, 0), 2);
+        arrowedLine(image, image_points[0], image_points[3], Scalar(255, 0, 0), 2);
+    }
+}
+
+void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
+                    double id0_x, double id0_y, double id0_z,
+                    double id1_x, double id1_y, double id1_z,
+                    double rel_x, double rel_y, double rel_z,
+                    double rel_rx, double rel_ry, double rel_rz,
+                    double rel_distance, bool stable) {
+    system("clear");
+    
+    cout << "==================================================" << endl;
+    cout << "   三标签基准系统 (ID0+ID1 -> ID2)              " << endl;
+    cout << "==================================================" << endl;
+    cout << "  基准标签: ID0 (主) + ID1 (辅助稳定)" << endl;
+    cout << "  目标标签: ID2" << endl;
+    cout << "  ROS DOMAIN ID: " << ROS_DOMAIN_ID << endl;
+    cout << "  话题名: " << TOPIC_NAME << endl;
+    cout << "  稳定状态: " << (stable ? "✅ 已稳定" : "⏳ 收敛中...") << endl;
+    cout << "==================================================" << endl;
+    cout << fixed << setprecision(3);
+    cout << endl;
+    cout << "  标签检测状态:" << endl;
+    cout << "    ID0: " << (id0_found ? "✅ 检测到" : "❌ 未检测") << endl;
+    cout << "    ID1: " << (id1_found ? "✅ 检测到" : "❌ 未检测") << endl;
+    cout << "    ID2: " << (id2_found ? "✅ 检测到" : "❌ 未检测") << endl;
+    cout << endl;
+    
+    if (id0_found) {
+        cout << "  ID0 相机坐标系 (mm):" << endl;
+        cout << "    X: " << id0_x * 1000 << "  Y: " << id0_y * 1000 << "  Z: " << id0_z * 1000 << endl;
+    }
+    if (id1_found) {
+        cout << "  ID1 相机坐标系 (mm):" << endl;
+        cout << "    X: " << id1_x * 1000 << "  Y: " << id1_y * 1000 << "  Z: " << id1_z * 1000 << endl;
+    }
+    
+    cout << endl;
+    if (id0_found && id2_found) {
+        cout << "  ID2 相对于 ID0 的位姿 (基准坐标系):" << endl;
+        cout << "    位置 (mm):  X: " << rel_x * 1000 << endl;
+        cout << "                Y: " << rel_y * 1000 << endl;
+        cout << "                Z: " << rel_z * 1000 << endl;
+        cout << "    距离:      " << rel_distance * 1000 << " mm" << endl;
+        cout << "    姿态 (度): Rx: " << rel_rx * 180.0 / CV_PI << "°" << endl;
+        cout << "                Ry: " << rel_ry * 180.0 / CV_PI << "°" << endl;
+        cout << "                Rz: " << rel_rz * 180.0 / CV_PI << "°" << endl;
+    } else {
+        cout << "  请确保 ID0 和 ID2 标签在视野内..." << endl;
+    }
+    cout << endl;
+    cout << "  话题数据: [x, y, z, distance, rx, ry, rz, id0_ok, id1_ok, id2_ok]" << endl;
+    cout << "==================================================" << endl;
+    cout << "  按 ESC 键退出" << endl;
+    cout << "==================================================" << endl;
+}
+
+int main(int argc, char** argv) {
+    setenv("ROS_DOMAIN_ID", to_string(ROS_DOMAIN_ID).c_str(), 1);
+    
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<ThreeTagSystemNode>();
+    
+    cout << "正在初始化 ZED 相机..." << endl;
+    
+    sl::Camera zed;
+    sl::InitParameters init_params;
+    init_params.camera_resolution = sl::RESOLUTION::HD720;
+    init_params.depth_mode = sl::DEPTH_MODE::NONE;
+    init_params.camera_fps = 30;
+
+    sl::ERROR_CODE err = zed.open(init_params);
+    if (err != sl::ERROR_CODE::SUCCESS) {
+        cerr << "无法打开 ZED 相机: " << sl::toString(err) << endl;
+        rclcpp::shutdown();
+        return -1;
+    }
+
+    cout << "ZED 相机打开成功!" << endl;
+
+    auto zed_params = zed.getCameraInformation().camera_configuration.calibration_parameters.left_cam;
+    double fx = zed_params.fx;
+    double fy = zed_params.fy;
+    double cx = zed_params.cx;
+    double cy = zed_params.cy;
+
+    Mat camera_matrix = (Mat_<double>(3, 3) <<
+        fx, 0, cx,
+        0, fy, cy,
+        0, 0, 1);
+
+    Mat dist_coeffs = (Mat_<double>(5, 1) <<
+        zed_params.disto[0], zed_params.disto[1],
+        zed_params.disto[2], zed_params.disto[3],
+        zed_params.disto[4]);
+
+    Ptr<aruco::Dictionary> dictionary = 
+        aruco::getPredefinedDictionary(aruco::DICT_APRILTAG_36h11);
+
+    Ptr<aruco::DetectorParameters> params = aruco::DetectorParameters::create();
+    params->cornerRefinementMethod = aruco::CORNER_REFINE_SUBPIX;
+    params->cornerRefinementMaxIterations = 100;
+    params->cornerRefinementMinAccuracy = 0.001;
+
+    AdvancedFilter relative_filter(60, 0.1);
+    
+    int frame_count = 0;
+    bool id0_found = false, id1_found = false, id2_found = false;
+    Vec3d id0_tvec, id0_rvec;
+    Vec3d id1_tvec, id1_rvec;
+    Vec3d id2_tvec, id2_rvec;
+
+    Mat frame;
+    sl::Mat zed_img;
+    
+    namedWindow("三标签基准系统 (ID0+ID1 -> ID2)", WINDOW_NORMAL);
+    resizeWindow("三标签基准系统 (ID0+ID1 -> ID2)", 1280, 720);
+
+    while (rclcpp::ok()) {
+        if (zed.grab() == sl::ERROR_CODE::SUCCESS) {
+            zed.retrieveImage(zed_img, sl::VIEW::LEFT);
+            
+            Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
+            cvtColor(cv_img, frame, COLOR_BGRA2BGR);
+
+            vector<int> ids;
+            vector<vector<Point2f>> corners;
+
+            aruco::detectMarkers(frame, dictionary, corners, ids, params);
+
+            id0_found = id1_found = id2_found = false;
+
+            if (!ids.empty()) {
+                aruco::drawDetectedMarkers(frame, corners, ids, Scalar(0, 255, 0));
+
+                vector<Vec3d> rvecs, tvecs;
+                aruco::estimatePoseSingleMarkers(
+                    corners, TAG_SIZE, camera_matrix, dist_coeffs, rvecs, tvecs);
+
+                for (size_t i = 0; i < ids.size(); i++) {
+                    Scalar axis_color;
+                    string tag_label;
+                    
+                    if (ids[i] == BASE_TAG_ID_0) {
+                        id0_found = true;
+                        id0_tvec = tvecs[i];
+                        id0_rvec = rvecs[i];
+                        axis_color = Scalar(0, 255, 0);
+                        tag_label = "ID0 (基准)";
+                    } else if (ids[i] == BASE_TAG_ID_1) {
+                        id1_found = true;
+                        id1_tvec = tvecs[i];
+                        id1_rvec = rvecs[i];
+                        axis_color = Scalar(255, 0, 255);
+                        tag_label = "ID1 (辅助)";
+                    } else if (ids[i] == TARGET_TAG_ID) {
+                        id2_found = true;
+                        id2_tvec = tvecs[i];
+                        id2_rvec = rvecs[i];
+                        axis_color = Scalar(0, 0, 255);
+                        tag_label = "ID2 (目标)";
+                    } else {
+                        continue;
+                    }
+
+                    aruco::drawAxis(frame, camera_matrix, dist_coeffs, 
+                                   rvecs[i], tvecs[i], TAG_SIZE * 0.5);
+                    
+                    putText(frame, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
+                           FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
+                }
+
+                if (id0_found && id2_found) {
+                    frame_count++;
+
+                    Mat R_id0 = rvecToMatrix(id0_rvec);
+                    Mat R_id2 = rvecToMatrix(id2_rvec);
+
+                    Mat T_id0_inv = inverseTransform(R_id0, Mat(id0_tvec));
+
+                    Mat R_rel = R_id0.t() * R_id2;
+                    Mat t_rel = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
+
+                    Vec3d rel_rvec = matrixToRvec(R_rel);
+                    double rel_distance = norm(t_rel);
+
+                    relative_filter.add(
+                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
+                        rel_rvec[0], rel_rvec[1], rel_rvec[2],
+                        rel_distance
+                    );
+
+                    double smooth_x, smooth_y, smooth_z;
+                    double smooth_rx, smooth_ry, smooth_rz, smooth_dist;
+                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z, 
+                                               smooth_rx, smooth_ry, smooth_rz, smooth_dist);
+
+                    if (frame_count % 3 == 0) {
+                        printSystemInfo(id0_found, id1_found, id2_found,
+                                       id0_tvec[0], id0_tvec[1], id0_tvec[2],
+                                       id1_found ? id1_tvec[0] : 0,
+                                       id1_found ? id1_tvec[1] : 0,
+                                       id1_found ? id1_tvec[2] : 0,
+                                       smooth_x, smooth_y, smooth_z,
+                                       smooth_rx, smooth_ry, smooth_rz,
+                                       smooth_dist, relative_filter.isStable());
+                    }
+
+                    node->publishRelative(
+                        smooth_x * 1000, smooth_y * 1000, smooth_z * 1000,
+                        smooth_rx, smooth_ry, smooth_rz,
+                        smooth_dist * 1000,
+                        id0_found, id1_found, id2_found
+                    );
+
+                    Vec3d smooth_rvec_vis(smooth_rx, smooth_ry, smooth_rz);
+                    
+                    stringstream ss;
+                    ss << fixed << setprecision(1);
+                    ss << "ID2->ID0 Dist: " << smooth_dist * 1000 << "mm";
+                    putText(frame, ss.str(), Point(20, 30), 
+                           FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 255, 255), 2);
+
+                    stringstream ss2;
+                    ss2 << "X: " << smooth_x * 1000 
+                        << " Y: " << smooth_y * 1000 
+                        << " Z: " << smooth_z * 1000 << " mm";
+                    putText(frame, ss2.str(), Point(20, 55), 
+                           FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
+
+                    if (id1_found) {
+                        double id0_to_id1_dist = cv::norm(id1_tvec - id0_tvec) * 1000;
+                        stringstream ss3;
+                        ss3 << fixed << setprecision(1);
+                        ss3 << "ID0->ID1 Check: " << id0_to_id1_dist << "mm (期望: " 
+                            << ID0_TO_ID1_X * 1000 << "mm)";
+                        putText(frame, ss3.str(), Point(20, 80), 
+                               FONT_HERSHEY_SIMPLEX, 0.4, Scalar(200, 200, 200), 1);
+                    }
+                }
+            }
+
+            if (!id0_found || !id2_found) {
+                putText(frame, "请将 ID0(绿) 和 ID2(红) 标签放入视野", Point(20, frame.rows - 30), 
+                       FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 0, 255), 2);
+            }
+
+            putText(frame, "ID0(绿)=基准 | ID1(紫)=辅助 | ID2(红)=目标", 
+                   Point(20, frame.rows - 60), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(200, 200, 200), 1);
+
+            imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame);
+        }
+
+        rclcpp::spin_some(node);
+
+        if (waitKey(10) == 27) {
+            cout << "\n用户退出" << endl;
+            break;
+        }
+    }
+
+    zed.close();
+    destroyAllWindows();
+    rclcpp::shutdown();
+    
+    return 0;
+}
