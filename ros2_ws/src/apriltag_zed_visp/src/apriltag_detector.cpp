@@ -27,6 +27,10 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     , enable_compensation_(true)
     , print_precise_pose_(true)
     , enable_relative_pose_(true)
+    , prefer_calibrated_(true)
+    , filter_window_(30)
+    , filter_alpha_(0.15)
+    , rel_filter_(30, 0.15)
 {
     RCLCPP_INFO(this->get_logger(), "Initializing AprilTag detector node...");
     
@@ -191,6 +195,9 @@ void AprilTagDetectorNode::declareParameters() {
     this->declare_parameter("print_precise_pose", true);
     this->declare_parameter("calib_file", "");
     this->declare_parameter("enable_relative_pose", true);
+    this->declare_parameter("prefer_calibrated", true);
+    this->declare_parameter("filter_window", 30);
+    this->declare_parameter("filter_alpha", 0.15);
 }
 
 void AprilTagDetectorNode::loadBasicParameters() {
@@ -225,6 +232,11 @@ void AprilTagDetectorNode::loadAdvancedParameters() {
     enable_compensation_ = this->get_parameter("enable_compensation").as_bool();
     print_precise_pose_ = this->get_parameter("print_precise_pose").as_bool();
     enable_relative_pose_ = this->get_parameter("enable_relative_pose").as_bool();
+    prefer_calibrated_ = this->get_parameter("prefer_calibrated").as_bool();
+    filter_window_ = this->get_parameter("filter_window").as_int();
+    filter_alpha_ = this->get_parameter("filter_alpha").as_double();
+    rel_filter_ = RelativePoseFilter(filter_window_, filter_alpha_);
+    RCLCPP_INFO(this->get_logger(), "Filter: window=%d, alpha=%.2f", filter_window_, filter_alpha_);
     
     if (use_direct_camera_) {
         CameraParameters params;
@@ -349,30 +361,43 @@ void AprilTagDetectorNode::imageCallback(
 
         // === Relative pose: ID2 relative to ID0 ===
         if (enable_relative_pose_ && id0_found && id2_found) {
-            // Factory intrinsics relative pose
+            // Choose which estimator to use based on prefer_calibrated_
+            TagPose& p0 = (prefer_calibrated_ && id0_calib_valid) ? pose_id0_calib : pose_id0;
+            TagPose& p2 = (prefer_calibrated_ && id2_calib_valid) ? pose_id2_calib : pose_id2;
+
             cv::Vec3d rel_t, rel_r;
             double distance;
-            computeRelativePose(pose_id0, pose_id2, rel_t, rel_r, distance);
-            publishRelativePose(rel_t, rel_r, distance, id0_found, id1_found, id2_found, msg->header);
+            computeRelativePose(p0, p2, rel_t, rel_r, distance);
+
+            // Apply temporal filter
+            rel_filter_.add(rel_t[0], rel_t[1], rel_t[2],
+                           rel_r[0], rel_r[1], rel_r[2]);
+            double fx, fy, fz, frx, fry, frz;
+            rel_filter_.getFiltered(fx, fy, fz, frx, fry, frz);
+
+            // Build filtered vectors for publishing
+            cv::Vec3d rel_t_filt(fx, fy, fz);
+            cv::Vec3d rel_r_filt(frx, fry, frz);
+            double dist_filt = std::sqrt(fx*fx + fy*fy + fz*fz);
+
+            publishRelativePose(rel_t_filt, rel_r_filt, dist_filt,
+                               id0_found, id1_found, id2_found, msg->header);
 
             if (print_precise_pose_) {
-                printRelativePose(pose_id0, pose_id1, pose_id2, id0_found, id1_found, id2_found);
-
-                // Calibrated comparison for relative pose
-                if (id0_calib_valid && id2_calib_valid) {
-                    cv::Vec3d rel_t_c, rel_r_c;
-                    double dist_c;
-                    computeRelativePose(pose_id0_calib, pose_id2_calib, rel_t_c, rel_r_c, dist_c);
-                    double ddist = std::abs(distance - dist_c) * 1000.0;
-                    std::stringstream ss;
-                    ss << std::fixed << std::setprecision(3);
-                    ss << "  Relative Δ (Factory vs Calib): "
-                       << "Δdist=" << std::setw(6) << ddist << " mm  "
-                       << "ΔRx=" << std::setw(6) << std::abs(rel_r[0]-rel_r_c[0])*180.0/M_PI << "°  "
-                       << "ΔRy=" << std::setw(6) << std::abs(rel_r[1]-rel_r_c[1])*180.0/M_PI << "°  "
-                       << "ΔRz=" << std::setw(6) << std::abs(rel_r[2]-rel_r_c[2])*180.0/M_PI << "°";
-                    RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
-                }
+                // Use original (unfiltered) values for print to see raw accuracy
+                printRelativePose(pose_id0, pose_id1, pose_id2,
+                                 id0_found, id1_found, id2_found);
+                // Show filtered value
+                std::stringstream ss;
+                ss << std::fixed << std::setprecision(3);
+                ss << "  Filtered (n=" << (rel_filter_.isReady() ? "✓" : "⏳") << "): "
+                   << "X=" << std::setw(8) << fx*1000.0 << " mm"
+                   << " Y=" << std::setw(8) << fy*1000.0 << " mm"
+                   << " Z=" << std::setw(8) << fz*1000.0 << " mm"
+                   << " dist=" << std::setw(8) << dist_filt*1000.0 << " mm";
+                RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+                RCLCPP_INFO(this->get_logger(), "  Using: %s",
+                            (prefer_calibrated_ && id0_calib_valid) ? "CALIBRATED" : "ZED Factory");
             }
         } else if (print_precise_pose_ && !(id0_found && id2_found)) {
             // Print individual tag status
@@ -653,13 +678,18 @@ void AprilTagDetectorNode::cameraCaptureLoop() {
             }
         }
 
-        // Relative pose
+        // Relative pose (with filtering)
         if (enable_relative_pose_ && id0_found && id2_found) {
             cv::Vec3d rel_t, rel_r; double dist;
             computeRelativePose(pose_id0, pose_id2, rel_t, rel_r, dist);
+            rel_filter_.add(rel_t[0], rel_t[1], rel_t[2], rel_r[0], rel_r[1], rel_r[2]);
+            double fx, fy, fz, frx, fry, frz;
+            rel_filter_.getFiltered(fx, fy, fz, frx, fry, frz);
+            cv::Vec3d rel_t_f(fx, fy, fz), rel_r_f(frx, fry, frz);
+            double dist_f = std::sqrt(fx*fx + fy*fy + fz*fz);
             auto hdr = std_msgs::msg::Header();
             hdr.stamp = this->now(); hdr.frame_id = camera_frame_;
-            publishRelativePose(rel_t, rel_r, dist, id0_found, id1_found, id2_found, hdr);
+            publishRelativePose(rel_t_f, rel_r_f, dist_f, id0_found, id1_found, id2_found, hdr);
             if (print_precise_pose_) {
                 printRelativePose(pose_id0, pose_id1, pose_id2, id0_found, id1_found, id2_found);
             }

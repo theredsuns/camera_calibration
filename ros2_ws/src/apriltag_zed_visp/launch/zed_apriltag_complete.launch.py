@@ -17,12 +17,16 @@ def generate_launch_description():
     publish_marker = LaunchConfiguration('publish_marker')
     enable_compensation = LaunchConfiguration('enable_compensation')
     print_precise_pose = LaunchConfiguration('print_precise_pose')
-    calib_file = LaunchConfiguration('calib_file')
+    prefer_calibrated = LaunchConfiguration('prefer_calibrated')
+    filter_window = LaunchConfiguration('filter_window')
+    filter_alpha = LaunchConfiguration('filter_alpha')
     base_tag_id_0 = LaunchConfiguration('base_tag_id_0')
     base_tag_id_1 = LaunchConfiguration('base_tag_id_1')
     enable_relative_pose = LaunchConfiguration('enable_relative_pose')
     
     zed_wrapper_share = get_package_share_directory('zed_wrapper')
+    apriltag_share = get_package_share_directory('apriltag_zed_visp')
+    default_calib = os.path.join(apriltag_share, 'config', 'zed_calibration.yaml')
     
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -71,9 +75,19 @@ def generate_launch_description():
             description='Print precise pose with 3 decimal places'
         ),
         DeclareLaunchArgument(
-            'calib_file',
-            default_value='',
-            description='Path to calibrated intrinsics YAML (empty = ZED factory only)'
+            'prefer_calibrated',
+            default_value='true',
+            description='Use calibrated intrinsics when available'
+        ),
+        DeclareLaunchArgument(
+            'filter_window',
+            default_value='30',
+            description='Sliding window size for relative pose filtering'
+        ),
+        DeclareLaunchArgument(
+            'filter_alpha',
+            default_value='0.15',
+            description='Low-pass filter strength (0=heavy, 1=raw)'
         ),
         DeclareLaunchArgument(
             'base_tag_id_0',
@@ -116,10 +130,13 @@ def generate_launch_description():
                 'publish_marker': publish_marker,
                 'enable_compensation': enable_compensation,
                 'print_precise_pose': print_precise_pose,
-                'calib_file': calib_file,
+                'calib_file': default_calib,
                 'base_tag_id_0': base_tag_id_0,
                 'base_tag_id_1': base_tag_id_1,
                 'enable_relative_pose': enable_relative_pose,
+                'prefer_calibrated': prefer_calibrated,
+                'filter_window': filter_window,
+                'filter_alpha': filter_alpha,
             }],
             remappings=[
                 ('zed/left/image_rect_color', '/zed/zed_node/left/image_rect_color'),

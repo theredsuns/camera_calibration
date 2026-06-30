@@ -19,8 +19,70 @@
 #include <memory>
 #include <string>
 #include <mutex>
+#include <deque>
+#include <algorithm>
 
 namespace apriltag_zed_visp {
+
+// Simple sliding-window filter for relative pose smoothing
+struct RelativePoseFilter {
+    std::deque<double> hist_x, hist_y, hist_z, hist_rx, hist_ry, hist_rz;
+    int max_size;
+    double alpha;
+    double last_x, last_y, last_z, last_rx, last_ry, last_rz;
+    bool initialized;
+
+    RelativePoseFilter(int size = 30, double smooth = 0.15)
+        : max_size(size), alpha(smooth), initialized(false) {
+        last_x = last_y = last_z = last_rx = last_ry = last_rz = 0.0;
+    }
+
+    void reset() {
+        hist_x.clear(); hist_y.clear(); hist_z.clear();
+        hist_rx.clear(); hist_ry.clear(); hist_rz.clear();
+        initialized = false;
+    }
+
+    double trimmedMean(const std::deque<double>& data, double trim = 0.2) {
+        if (data.empty()) return 0.0;
+        std::deque<double> sorted = data;
+        std::sort(sorted.begin(), sorted.end());
+        int trim_n = static_cast<int>(sorted.size() * trim / 2);
+        double sum = 0.0; int n = 0;
+        for (int i = trim_n; i < static_cast<int>(sorted.size()) - trim_n; ++i) {
+            sum += sorted[i]; ++n;
+        }
+        return (n > 0) ? sum / n : sorted[sorted.size() / 2];
+    }
+
+    double lowPass(double val, double& last) {
+        last = alpha * val + (1.0 - alpha) * last;
+        return last;
+    }
+
+    void add(double x, double y, double z, double rx, double ry, double rz) {
+        hist_x.push_back(x); hist_y.push_back(y); hist_z.push_back(z);
+        hist_rx.push_back(rx); hist_ry.push_back(ry); hist_rz.push_back(rz);
+        if (static_cast<int>(hist_x.size()) > max_size) {
+            hist_x.pop_front(); hist_y.pop_front(); hist_z.pop_front();
+            hist_rx.pop_front(); hist_ry.pop_front(); hist_rz.pop_front();
+        }
+        initialized = true;
+    }
+
+    void getFiltered(double& x, double& y, double& z,
+                     double& rx, double& ry, double& rz) {
+        if (!initialized || hist_x.empty()) { x=y=z=rx=ry=rz=0.0; return; }
+        x = lowPass(trimmedMean(hist_x), last_x);
+        y = lowPass(trimmedMean(hist_y), last_y);
+        z = lowPass(trimmedMean(hist_z), last_z);
+        rx = lowPass(trimmedMean(hist_rx), last_rx);
+        ry = lowPass(trimmedMean(hist_ry), last_ry);
+        rz = lowPass(trimmedMean(hist_rz), last_rz);
+    }
+
+    bool isReady() const { return static_cast<int>(hist_x.size()) >= max_size / 3; }
+};
 
 class AprilTagDetectorNode : public rclcpp::Node {
 public:
@@ -105,8 +167,14 @@ private:
     bool camera_info_received_;
     bool camera_params_set_;
     bool calib_params_loaded_;
+    bool prefer_calibrated_;
     std::string calib_file_path_;
     CameraParameters calib_params_;
+
+    // Relative pose filtering
+    int filter_window_;
+    double filter_alpha_;
+    RelativePoseFilter rel_filter_;
     
     void declareParameters();
     void loadBasicParameters();
