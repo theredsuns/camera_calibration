@@ -17,6 +17,7 @@ def generate_launch_description():
     publish_marker = LaunchConfiguration('publish_marker')
     enable_compensation = LaunchConfiguration('enable_compensation')
     print_precise_pose = LaunchConfiguration('print_precise_pose')
+    calib_file = LaunchConfiguration('calib_file')
     
     zed_wrapper_share = get_package_share_directory('zed_wrapper')
     
@@ -66,6 +67,11 @@ def generate_launch_description():
             default_value='true',
             description='Print precise pose with 3 decimal places'
         ),
+        DeclareLaunchArgument(
+            'calib_file',
+            default_value='',
+            description='Path to calibrated intrinsics YAML (empty = ZED factory only)'
+        ),
         
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -92,6 +98,7 @@ def generate_launch_description():
                 'publish_marker': publish_marker,
                 'enable_compensation': enable_compensation,
                 'print_precise_pose': print_precise_pose,
+                'calib_file': calib_file,
             }],
             remappings=[
                 ('zed/left/image_rect_color', '/zed/zed_node/left/image_rect_color'),

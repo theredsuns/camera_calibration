@@ -3,6 +3,7 @@
 #include <sstream>
 #include <functional>
 #include <thread>
+#include <fstream>
 
 using namespace std::placeholders;
 
@@ -12,6 +13,7 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     : Node("apriltag_detector")
     , camera_info_received_(false)
     , camera_params_set_(false)
+    , calib_params_loaded_(false)
     , running_(true)
     , use_direct_camera_(false)
     , camera_device_id_(0)
@@ -57,6 +59,35 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     RCLCPP_INFO(this->get_logger(), "Loading advanced parameters...");
     loadAdvancedParameters();
     RCLCPP_INFO(this->get_logger(), "Advanced parameters loaded");
+
+    // Create second pose estimator for calibrated intrinsics
+    try {
+        pose_estimator_calib_ = std::make_unique<PoseEstimator>(tag_size_);
+        RCLCPP_INFO(this->get_logger(), "Calibrated pose estimator created");
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to create calibrated pose estimator: %s", e.what());
+    }
+
+    // Load calibration YAML if provided
+    calib_file_path_ = this->get_parameter("calib_file").as_string();
+    if (!calib_file_path_.empty()) {
+        if (loadCalibrationYAML(calib_file_path_, calib_params_)) {
+            if (pose_estimator_calib_) {
+                pose_estimator_calib_->setCameraParameters(calib_params_);
+            }
+            calib_params_loaded_ = true;
+            RCLCPP_INFO(this->get_logger(), "Calibrated intrinsics loaded from: %s",
+                        calib_file_path_.c_str());
+            RCLCPP_INFO(this->get_logger(), "  Calib fx=%.2f, fy=%.2f, cx=%.2f, cy=%.2f",
+                        calib_params_.fx(), calib_params_.fy(),
+                        calib_params_.cx(), calib_params_.cy());
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Failed to load calibration file: %s",
+                        calib_file_path_.c_str());
+        }
+    } else {
+        RCLCPP_INFO(this->get_logger(), "No calibration file specified — comparison disabled");
+    }
     
     try {
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -145,6 +176,7 @@ void AprilTagDetectorNode::declareParameters() {
     this->declare_parameter("publish_marker", true);
     this->declare_parameter("enable_compensation", true);
     this->declare_parameter("print_precise_pose", true);
+    this->declare_parameter("calib_file", "");
 }
 
 void AprilTagDetectorNode::loadBasicParameters() {
@@ -256,38 +288,55 @@ void AprilTagDetectorNode::imageCallback(
         cv::Mat image = cv_ptr->image;
         
         auto detections = detector_->detect(image);
-        
+
         for (const auto& det : detections) {
             if (det.id != target_tag_id_) continue;
-            
-            TagPose pose = pose_estimator_->estimatePoseIterative(det.corners);
-            
-            if (!pose.valid) continue;
-            
-            if (enable_compensation_) {
+
+            // === Factory intrinsics estimation ===
+            TagPose pose_factory = pose_estimator_->estimatePoseIterative(det.corners);
+            double conf_factory = 1.0;
+            if (pose_factory.valid && enable_compensation_) {
                 TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
-                    det.corners, 
+                    det.corners,
                     cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                
-                pose.translation = error_compensation_->compensateAll(
-                    pose.translation, pose.rotation, det.corners,
+                pose_factory.translation = error_compensation_->compensateAll(
+                    pose_factory.translation, pose_factory.rotation, det.corners,
                     cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                
-                if (print_precise_pose_) {
-                    printPosePrecise(pose, metrics.confidence);
+                conf_factory = metrics.confidence;
+            }
+
+            // === Calibrated intrinsics estimation ===
+            TagPose pose_calib;
+            double conf_calib = 1.0;
+            bool calib_valid = false;
+            if (calib_params_loaded_ && pose_estimator_calib_) {
+                pose_calib = pose_estimator_calib_->estimatePoseIterative(det.corners);
+                if (pose_calib.valid && enable_compensation_) {
+                    TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
+                        det.corners,
+                        cv::Mat(calib_params_.camera_matrix));
+                    pose_calib.translation = error_compensation_->compensateAll(
+                        pose_calib.translation, pose_calib.rotation, det.corners,
+                        cv::Mat(calib_params_.camera_matrix));
+                    conf_calib = metrics.confidence;
                 }
-            } else if (print_precise_pose_) {
-                printPosePrecise(pose, 1.0);
+                calib_valid = pose_calib.valid;
             }
-            
-            publishDetection(det, pose, msg->header);
-            
-            if (publish_marker_) {
-                publishMarker(pose, msg->header);
+
+            // === Print comparison ===
+            if (print_precise_pose_) {
+                if (calib_valid) {
+                    printPoseComparison(pose_factory, pose_calib, conf_factory, conf_calib);
+                } else if (pose_factory.valid) {
+                    printPosePrecise(pose_factory, conf_factory);
+                }
             }
-            
-            if (publish_tf_) {
-                publishTransform(pose, msg->header);
+
+            // === Publish using factory params (default) ===
+            if (pose_factory.valid) {
+                publishDetection(det, pose_factory, msg->header);
+                if (publish_marker_) publishMarker(pose_factory, msg->header);
+                if (publish_tf_) publishTransform(pose_factory, msg->header);
             }
         }
         
@@ -530,42 +579,58 @@ void AprilTagDetectorNode::cameraCaptureLoop() {
         last_time = current_time;
         
         auto detections = detector_->detect(frame);
-        
+
         for (const auto& det : detections) {
             if (det.id != target_tag_id_) continue;
-            
-            TagPose pose = pose_estimator_->estimatePoseIterative(det.corners);
-            
-            if (!pose.valid) continue;
-            
-            if (enable_compensation_) {
+
+            // === Factory intrinsics estimation ===
+            TagPose pose_factory = pose_estimator_->estimatePoseIterative(det.corners);
+            double conf_factory = 1.0;
+            if (pose_factory.valid && enable_compensation_) {
                 TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
-                    det.corners, 
+                    det.corners,
                     cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                
-                pose.translation = error_compensation_->compensateAll(
-                    pose.translation, pose.rotation, det.corners,
+                pose_factory.translation = error_compensation_->compensateAll(
+                    pose_factory.translation, pose_factory.rotation, det.corners,
                     cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                
-                if (print_precise_pose_) {
-                    printPosePrecise(pose, metrics.confidence);
+                conf_factory = metrics.confidence;
+            }
+
+            // === Calibrated intrinsics estimation ===
+            TagPose pose_calib;
+            double conf_calib = 1.0;
+            bool calib_valid = false;
+            if (calib_params_loaded_ && pose_estimator_calib_) {
+                pose_calib = pose_estimator_calib_->estimatePoseIterative(det.corners);
+                if (pose_calib.valid && enable_compensation_) {
+                    TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
+                        det.corners,
+                        cv::Mat(calib_params_.camera_matrix));
+                    pose_calib.translation = error_compensation_->compensateAll(
+                        pose_calib.translation, pose_calib.rotation, det.corners,
+                        cv::Mat(calib_params_.camera_matrix));
+                    conf_calib = metrics.confidence;
                 }
-            } else if (print_precise_pose_) {
-                printPosePrecise(pose, 1.0);
+                calib_valid = pose_calib.valid;
             }
-            
-            auto header = std_msgs::msg::Header();
-            header.stamp = this->now();
-            header.frame_id = camera_frame_;
-            
-            publishDetection(det, pose, header);
-            
-            if (publish_marker_) {
-                publishMarker(pose, header);
+
+            // === Print comparison ===
+            if (print_precise_pose_) {
+                if (calib_valid) {
+                    printPoseComparison(pose_factory, pose_calib, conf_factory, conf_calib);
+                } else if (pose_factory.valid) {
+                    printPosePrecise(pose_factory, conf_factory);
+                }
             }
-            
-            if (publish_tf_) {
-                publishTransform(pose, header);
+
+            // === Publish using factory params (default) ===
+            if (pose_factory.valid) {
+                auto header = std_msgs::msg::Header();
+                header.stamp = this->now();
+                header.frame_id = camera_frame_;
+                publishDetection(det, pose_factory, header);
+                if (publish_marker_) publishMarker(pose_factory, header);
+                if (publish_tf_) publishTransform(pose_factory, header);
             }
         }
         
@@ -603,7 +668,156 @@ void AprilTagDetectorNode::cameraCaptureLoop() {
     RCLCPP_INFO(this->get_logger(), "Camera capture loop stopped");
 }
 
-} 
+bool AprilTagDetectorNode::loadCalibrationYAML(const std::string& filepath, CameraParameters& params) {
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        RCLCPP_ERROR(this->get_logger(), "Cannot open calibration file: %s", filepath.c_str());
+        return false;
+    }
+
+    std::string line;
+    int img_w = 0, img_h = 0;
+    std::vector<double> K(9), D;
+
+    while (std::getline(file, line)) {
+        // Skip comments and empty lines
+        if (line.empty() || line[0] == '#') continue;
+
+        // Parse image_width / image_height
+        if (line.find("image_width:") != std::string::npos) {
+            img_w = std::stoi(line.substr(line.find(':') + 1));
+        } else if (line.find("image_height:") != std::string::npos) {
+            img_h = std::stoi(line.substr(line.find(':') + 1));
+        }
+        // Parse camera_matrix data array
+        else if (line.find("camera_matrix:") != std::string::npos) {
+            // Read next line: "  rows: 3"
+            std::getline(file, line);
+            // Read next line: "  cols: 3"
+            std::getline(file, line);
+            // Read next line: "  data: [...]"
+            std::getline(file, line);
+            size_t start = line.find('[');
+            size_t end = line.find(']');
+            if (start != std::string::npos && end != std::string::npos) {
+                std::string data = line.substr(start + 1, end - start - 1);
+                std::stringstream ss(data);
+                std::string val;
+                int idx = 0;
+                while (std::getline(ss, val, ',') && idx < 9) {
+                    // Trim whitespace
+                    val.erase(0, val.find_first_not_of(" \t"));
+                    K[idx++] = std::stod(val);
+                }
+            }
+        }
+        // Parse distortion_coefficients data array
+        else if (line.find("distortion_coefficients:") != std::string::npos) {
+            std::getline(file, line); // rows
+            std::getline(file, line); // cols
+            std::getline(file, line); // data: [...]
+            size_t start = line.find('[');
+            size_t end = line.find(']');
+            if (start != std::string::npos && end != std::string::npos) {
+                std::string data = line.substr(start + 1, end - start - 1);
+                std::stringstream ss(data);
+                std::string val;
+                while (std::getline(ss, val, ',')) {
+                    val.erase(0, val.find_first_not_of(" \t"));
+                    if (!val.empty()) D.push_back(std::stod(val));
+                }
+            }
+        }
+    }
+    file.close();
+
+    if (img_w == 0 || img_h == 0 || K[0] == 0.0) {
+        RCLCPP_ERROR(this->get_logger(), "Invalid calibration data in file: %s", filepath.c_str());
+        return false;
+    }
+
+    params.camera_matrix = cv::Matx33d(
+        K[0], K[1], K[2],
+        K[3], K[4], K[5],
+        K[6], K[7], K[8]
+    );
+    params.image_width = img_w;
+    params.image_height = img_h;
+
+    params.dist_coeffs = cv::Mat(static_cast<int>(D.size()), 1, CV_64F);
+    for (size_t i = 0; i < D.size(); ++i) {
+        params.dist_coeffs.at<double>(static_cast<int>(i)) = D[i];
+    }
+
+    RCLCPP_INFO(this->get_logger(), "Loaded %zu distortion coefficients", D.size());
+    return true;
+}
+
+void AprilTagDetectorNode::printPoseComparison(
+    const TagPose& pose_factory, const TagPose& pose_calib,
+    double conf_factory, double conf_calib) {
+
+    // Compute delta between two estimations
+    double dx = (pose_factory.translation[0] - pose_calib.translation[0]) * 1000.0;
+    double dy = (pose_factory.translation[1] - pose_calib.translation[1]) * 1000.0;
+    double dz = (pose_factory.translation[2] - pose_calib.translation[2]) * 1000.0;
+    double dist_diff = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+    double drx = (pose_factory.rotation[0] - pose_calib.rotation[0]) * 180.0 / M_PI;
+    double dry = (pose_factory.rotation[1] - pose_calib.rotation[1]) * 180.0 / M_PI;
+    double drz = (pose_factory.rotation[2] - pose_calib.rotation[2]) * 180.0 / M_PI;
+
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(3);
+    ss << "\n╔══════════════════════════════════════════════════════════════╗\n";
+    ss << "║  AprilTag ID " << target_tag_id_
+       << " — Intrinsics Comparison                      ║\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+    ss << "║              │  ZED Factory  │  Calibrated   │   Δ (abs)    ║\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+    ss << "║  X (mm)      │  " << std::setw(10) << pose_factory.translation[0] * 1000.0
+       << "  │  " << std::setw(10) << pose_calib.translation[0] * 1000.0
+       << "  │  " << std::setw(10) << std::abs(dx) << "  ║\n";
+    ss << "║  Y (mm)      │  " << std::setw(10) << pose_factory.translation[1] * 1000.0
+       << "  │  " << std::setw(10) << pose_calib.translation[1] * 1000.0
+       << "  │  " << std::setw(10) << std::abs(dy) << "  ║\n";
+    ss << "║  Z (mm)      │  " << std::setw(10) << pose_factory.translation[2] * 1000.0
+       << "  │  " << std::setw(10) << pose_calib.translation[2] * 1000.0
+       << "  │  " << std::setw(10) << std::abs(dz) << "  ║\n";
+    ss << "║  3D Δ (mm)   │              │               │  "
+       << std::setw(10) << dist_diff << "  ║\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+    ss << "║  Rx (deg)    │  " << std::setw(10) << pose_factory.rotation[0] * 180.0 / M_PI
+       << "  │  " << std::setw(10) << pose_calib.rotation[0] * 180.0 / M_PI
+       << "  │  " << std::setw(10) << std::abs(drx) << "  ║\n";
+    ss << "║  Ry (deg)    │  " << std::setw(10) << pose_factory.rotation[1] * 180.0 / M_PI
+       << "  │  " << std::setw(10) << pose_calib.rotation[1] * 180.0 / M_PI
+       << "  │  " << std::setw(10) << std::abs(dry) << "  ║\n";
+    ss << "║  Rz (deg)    │  " << std::setw(10) << pose_factory.rotation[2] * 180.0 / M_PI
+       << "  │  " << std::setw(10) << pose_calib.rotation[2] * 180.0 / M_PI
+       << "  │  " << std::setw(10) << std::abs(drz) << "  ║\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+    ss << "║  Reproj (px) │  " << std::setw(10) << std::setprecision(4) << pose_factory.reprojection_error
+       << "  │  " << std::setw(10) << std::setprecision(4) << pose_calib.reprojection_error
+       << "  │              ║\n";
+    ss << std::setprecision(3);
+    ss << "║  Confidence  │  " << std::setw(10) << conf_factory * 100.0 << "%"
+       << "  │  " << std::setw(10) << conf_calib * 100.0 << "%"
+       << "  │              ║\n";
+    ss << "╚══════════════════════════════════════════════════════════════╝\n";
+
+    RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+}
+
+void AprilTagDetectorNode::processDetection(
+    const AprilTagDetection& det,
+    const std_msgs::msg::Header& header) {
+    // Placeholder: detection processing is done inline in imageCallback / cameraCaptureLoop
+    (void)det;
+    (void)header;
+}
+
+}
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);

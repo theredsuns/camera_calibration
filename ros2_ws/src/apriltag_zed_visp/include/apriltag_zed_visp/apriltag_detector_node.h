@@ -46,6 +46,11 @@ private:
                           const std_msgs::msg::Header& header);
     
     void printPosePrecise(const TagPose& pose, double confidence);
+    void printPoseComparison(const TagPose& pose_factory, const TagPose& pose_calib,
+                             double conf_factory, double conf_calib);
+    bool loadCalibrationYAML(const std::string& filepath, CameraParameters& params);
+    void processDetection(const AprilTagDetection& det,
+                          const std_msgs::msg::Header& header);
     
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr left_image_sub_;
@@ -62,6 +67,7 @@ private:
     
     std::unique_ptr<AprilTag36h11Detector> detector_;
     std::unique_ptr<PoseEstimator> pose_estimator_;
+    std::unique_ptr<PoseEstimator> pose_estimator_calib_;  // calibrated intrinsics
     std::unique_ptr<ErrorCompensation> error_compensation_;
     
     sensor_msgs::msg::Image::ConstSharedPtr last_left_image_;
@@ -82,6 +88,9 @@ private:
     
     bool camera_info_received_;
     bool camera_params_set_;
+    bool calib_params_loaded_;
+    std::string calib_file_path_;
+    CameraParameters calib_params_;
     
     void declareParameters();
     void loadBasicParameters();
