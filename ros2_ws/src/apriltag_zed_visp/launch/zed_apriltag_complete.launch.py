@@ -18,6 +18,9 @@ def generate_launch_description():
     enable_compensation = LaunchConfiguration('enable_compensation')
     print_precise_pose = LaunchConfiguration('print_precise_pose')
     calib_file = LaunchConfiguration('calib_file')
+    base_tag_id_0 = LaunchConfiguration('base_tag_id_0')
+    base_tag_id_1 = LaunchConfiguration('base_tag_id_1')
+    enable_relative_pose = LaunchConfiguration('enable_relative_pose')
     
     zed_wrapper_share = get_package_share_directory('zed_wrapper')
     
@@ -72,6 +75,21 @@ def generate_launch_description():
             default_value='',
             description='Path to calibrated intrinsics YAML (empty = ZED factory only)'
         ),
+        DeclareLaunchArgument(
+            'base_tag_id_0',
+            default_value='0',
+            description='Base reference tag ID (default: 0)'
+        ),
+        DeclareLaunchArgument(
+            'base_tag_id_1',
+            default_value='1',
+            description='Auxiliary verification tag ID (default: 1)'
+        ),
+        DeclareLaunchArgument(
+            'enable_relative_pose',
+            default_value='true',
+            description='Compute and publish ID2 pose relative to ID0'
+        ),
         
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -99,6 +117,9 @@ def generate_launch_description():
                 'enable_compensation': enable_compensation,
                 'print_precise_pose': print_precise_pose,
                 'calib_file': calib_file,
+                'base_tag_id_0': base_tag_id_0,
+                'base_tag_id_1': base_tag_id_1,
+                'enable_relative_pose': enable_relative_pose,
             }],
             remappings=[
                 ('zed/left/image_rect_color', '/zed/zed_node/left/image_rect_color'),

@@ -51,6 +51,18 @@ private:
     bool loadCalibrationYAML(const std::string& filepath, CameraParameters& params);
     void processDetection(const AprilTagDetection& det,
                           const std_msgs::msg::Header& header);
+
+    // Multi-tag relative pose
+    TagPose estimateSingleTag(const std::vector<cv::Point2f>& corners,
+                              PoseEstimator& estimator, double& confidence);
+    void computeRelativePose(const TagPose& pose_base, const TagPose& pose_target,
+                             cv::Vec3d& rel_t, cv::Vec3d& rel_r, double& distance);
+    void printRelativePose(const TagPose& pose_id0, const TagPose& pose_id1,
+                           const TagPose& pose_id2,
+                           bool id0_found, bool id1_found, bool id2_found);
+    void publishRelativePose(const cv::Vec3d& rel_t, const cv::Vec3d& rel_r,
+                             double distance, bool id0_found, bool id1_found, bool id2_found,
+                             const std_msgs::msg::Header& header);
     
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr left_image_sub_;
@@ -62,6 +74,7 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr debug_image_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr relative_pose_pub_;
     
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     
@@ -79,12 +92,15 @@ private:
     std::string camera_frame_;
     std::string tag_frame_;
     int target_tag_id_;
+    int base_tag_id_0_;
+    int base_tag_id_1_;
     double tag_size_;
     bool use_stereo_;
     bool publish_tf_;
     bool publish_marker_;
     bool enable_compensation_;
     bool print_precise_pose_;
+    bool enable_relative_pose_;
     
     bool camera_info_received_;
     bool camera_params_set_;

@@ -18,12 +18,15 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     , use_direct_camera_(false)
     , camera_device_id_(0)
     , target_tag_id_(2)
+    , base_tag_id_0_(0)
+    , base_tag_id_1_(1)
     , tag_size_(0.06)
     , use_stereo_(false)
     , publish_tf_(true)
     , publish_marker_(true)
     , enable_compensation_(true)
     , print_precise_pose_(true)
+    , enable_relative_pose_(true)
 {
     RCLCPP_INFO(this->get_logger(), "Initializing AprilTag detector node...");
     
@@ -119,6 +122,14 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     } catch (const std::exception& e) {
         RCLCPP_ERROR(this->get_logger(), "Failed to create debug image publisher: %s", e.what());
     }
+
+    try {
+        relative_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
+            "relative_pose", 10);
+        RCLCPP_INFO(this->get_logger(), "Relative pose publisher created");
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to create relative pose publisher: %s", e.what());
+    }
     
     if (use_direct_camera_) {
         RCLCPP_INFO(this->get_logger(), "Using direct camera capture mode");
@@ -162,6 +173,8 @@ void AprilTagDetectorNode::declareParameters() {
     this->declare_parameter("camera_frame", "camera_frame");
     this->declare_parameter("tag_frame", "tag_36h11_id2");
     this->declare_parameter("target_tag_id", 2);
+    this->declare_parameter("base_tag_id_0", 0);
+    this->declare_parameter("base_tag_id_1", 1);
     this->declare_parameter("tag_size", 0.06);
     this->declare_parameter("use_stereo", false);
     this->declare_parameter("use_direct_camera", true);
@@ -177,6 +190,7 @@ void AprilTagDetectorNode::declareParameters() {
     this->declare_parameter("enable_compensation", true);
     this->declare_parameter("print_precise_pose", true);
     this->declare_parameter("calib_file", "");
+    this->declare_parameter("enable_relative_pose", true);
 }
 
 void AprilTagDetectorNode::loadBasicParameters() {
@@ -187,7 +201,11 @@ void AprilTagDetectorNode::loadBasicParameters() {
     
     target_tag_id_ = this->get_parameter("target_tag_id").as_int();
     RCLCPP_INFO(this->get_logger(), "target_tag_id: %d", target_tag_id_);
-    
+
+    base_tag_id_0_ = this->get_parameter("base_tag_id_0").as_int();
+    base_tag_id_1_ = this->get_parameter("base_tag_id_1").as_int();
+    RCLCPP_INFO(this->get_logger(), "base_tag_ids: ID0=%d, ID1=%d", base_tag_id_0_, base_tag_id_1_);
+
     tag_size_ = this->get_parameter("tag_size").as_double();
     RCLCPP_INFO(this->get_logger(), "tag_size: %.3f", tag_size_);
     
@@ -206,6 +224,7 @@ void AprilTagDetectorNode::loadAdvancedParameters() {
     publish_marker_ = this->get_parameter("publish_marker").as_bool();
     enable_compensation_ = this->get_parameter("enable_compensation").as_bool();
     print_precise_pose_ = this->get_parameter("print_precise_pose").as_bool();
+    enable_relative_pose_ = this->get_parameter("enable_relative_pose").as_bool();
     
     if (use_direct_camera_) {
         CameraParameters params;
@@ -284,83 +303,113 @@ void AprilTagDetectorNode::imageCallback(
     try {
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(
             msg, sensor_msgs::image_encodings::BGR8);
-        
+
         cv::Mat image = cv_ptr->image;
-        
         auto detections = detector_->detect(image);
 
+        // Collect poses for all relevant tags
+        TagPose pose_id0, pose_id1, pose_id2;
+        TagPose pose_id0_calib, pose_id2_calib;
+        bool id0_found = false, id1_found = false, id2_found = false;
+        bool id0_calib_valid = false, id2_calib_valid = false;
+
         for (const auto& det : detections) {
-            if (det.id != target_tag_id_) continue;
+            double conf;
+            TagPose pose_f = estimateSingleTag(det.corners, *pose_estimator_, conf);
 
-            // === Factory intrinsics estimation ===
-            TagPose pose_factory = pose_estimator_->estimatePoseIterative(det.corners);
-            double conf_factory = 1.0;
-            if (pose_factory.valid && enable_compensation_) {
-                TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
-                    det.corners,
-                    cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                pose_factory.translation = error_compensation_->compensateAll(
-                    pose_factory.translation, pose_factory.rotation, det.corners,
-                    cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                conf_factory = metrics.confidence;
-            }
-
-            // === Calibrated intrinsics estimation ===
-            TagPose pose_calib;
-            double conf_calib = 1.0;
-            bool calib_valid = false;
-            if (calib_params_loaded_ && pose_estimator_calib_) {
-                pose_calib = pose_estimator_calib_->estimatePoseIterative(det.corners);
-                if (pose_calib.valid && enable_compensation_) {
-                    TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
-                        det.corners,
-                        cv::Mat(calib_params_.camera_matrix));
-                    pose_calib.translation = error_compensation_->compensateAll(
-                        pose_calib.translation, pose_calib.rotation, det.corners,
-                        cv::Mat(calib_params_.camera_matrix));
-                    conf_calib = metrics.confidence;
+            if (det.id == base_tag_id_0_) {
+                id0_found = pose_f.valid;
+                pose_id0 = pose_f;
+                // Calibrated
+                if (calib_params_loaded_ && pose_estimator_calib_) {
+                    double c2;
+                    pose_id0_calib = estimateSingleTag(det.corners, *pose_estimator_calib_, c2);
+                    id0_calib_valid = pose_id0_calib.valid;
                 }
-                calib_valid = pose_calib.valid;
-            }
-
-            // === Print comparison ===
-            if (print_precise_pose_) {
-                if (calib_valid) {
-                    printPoseComparison(pose_factory, pose_calib, conf_factory, conf_calib);
-                } else if (pose_factory.valid) {
-                    printPosePrecise(pose_factory, conf_factory);
+            } else if (det.id == base_tag_id_1_) {
+                id1_found = pose_f.valid;
+                pose_id1 = pose_f;
+            } else if (det.id == target_tag_id_) {
+                id2_found = pose_f.valid;
+                pose_id2 = pose_f;
+                // Calibrated
+                if (calib_params_loaded_ && pose_estimator_calib_) {
+                    double c2;
+                    pose_id2_calib = estimateSingleTag(det.corners, *pose_estimator_calib_, c2);
+                    id2_calib_valid = pose_id2_calib.valid;
                 }
-            }
-
-            // === Publish using factory params (default) ===
-            if (pose_factory.valid) {
-                publishDetection(det, pose_factory, msg->header);
-                if (publish_marker_) publishMarker(pose_factory, msg->header);
-                if (publish_tf_) publishTransform(pose_factory, msg->header);
+                // Publish target tag pose
+                if (pose_f.valid) {
+                    publishDetection(det, pose_f, msg->header);
+                    if (publish_marker_) publishMarker(pose_f, msg->header);
+                    if (publish_tf_) publishTransform(pose_f, msg->header);
+                }
             }
         }
-        
+
+        // === Relative pose: ID2 relative to ID0 ===
+        if (enable_relative_pose_ && id0_found && id2_found) {
+            // Factory intrinsics relative pose
+            cv::Vec3d rel_t, rel_r;
+            double distance;
+            computeRelativePose(pose_id0, pose_id2, rel_t, rel_r, distance);
+            publishRelativePose(rel_t, rel_r, distance, id0_found, id1_found, id2_found, msg->header);
+
+            if (print_precise_pose_) {
+                printRelativePose(pose_id0, pose_id1, pose_id2, id0_found, id1_found, id2_found);
+
+                // Calibrated comparison for relative pose
+                if (id0_calib_valid && id2_calib_valid) {
+                    cv::Vec3d rel_t_c, rel_r_c;
+                    double dist_c;
+                    computeRelativePose(pose_id0_calib, pose_id2_calib, rel_t_c, rel_r_c, dist_c);
+                    double ddist = std::abs(distance - dist_c) * 1000.0;
+                    std::stringstream ss;
+                    ss << std::fixed << std::setprecision(3);
+                    ss << "  Relative Δ (Factory vs Calib): "
+                       << "Δdist=" << std::setw(6) << ddist << " mm  "
+                       << "ΔRx=" << std::setw(6) << std::abs(rel_r[0]-rel_r_c[0])*180.0/M_PI << "°  "
+                       << "ΔRy=" << std::setw(6) << std::abs(rel_r[1]-rel_r_c[1])*180.0/M_PI << "°  "
+                       << "ΔRz=" << std::setw(6) << std::abs(rel_r[2]-rel_r_c[2])*180.0/M_PI << "°";
+                    RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+                }
+            }
+        } else if (print_precise_pose_ && !(id0_found && id2_found)) {
+            // Print individual tag status
+            std::stringstream ss;
+            ss << "Tags: ID0=" << (id0_found?"OK":"MISS")
+               << " ID1=" << (id1_found?"OK":"MISS")
+               << " ID2=" << (id2_found?"OK":"MISS");
+            RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+        }
+
+        // Debug image
         if (debug_image_pub_->get_subscription_count() > 0) {
             for (const auto& det : detections) {
+                cv::Scalar color = cv::Scalar(0, 255, 0); // green default
+                if (det.id == base_tag_id_0_) color = cv::Scalar(255, 0, 0);    // blue
+                else if (det.id == base_tag_id_1_) color = cv::Scalar(255, 0, 255); // purple
+                else if (det.id == target_tag_id_) color = cv::Scalar(0, 0, 255);   // red
+
                 cv::polylines(image, std::vector<std::vector<cv::Point>>{
                     std::vector<cv::Point>(det.corners.begin(), det.corners.end())},
-                    true, cv::Scalar(0, 255, 0), 2);
-                
+                    true, color, 2);
                 for (const auto& corner : det.corners) {
-                    cv::circle(image, corner, 3, cv::Scalar(0, 0, 255), -1);
+                    cv::circle(image, corner, 3, color, -1);
                 }
-                
-                std::stringstream ss;
-                ss << "ID: " << det.id;
-                cv::putText(image, ss.str(), det.center, 
-                           cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0), 2);
+                std::string label;
+                if (det.id == base_tag_id_0_) label = "ID0 BASE";
+                else if (det.id == base_tag_id_1_) label = "ID1 AUX";
+                else if (det.id == target_tag_id_) label = "ID2 TGT";
+                else label = "ID" + std::to_string(det.id);
+                cv::putText(image, label, det.center,
+                           cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 2);
             }
-            
-            sensor_msgs::msg::Image::SharedPtr debug_msg = 
+            sensor_msgs::msg::Image::SharedPtr debug_msg =
                 cv_bridge::CvImage(msg->header, "bgr8", image).toImageMsg();
             debug_image_pub_->publish(*debug_msg);
         }
-        
+
     } catch (const cv_bridge::Exception& e) {
         RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
     }
@@ -580,57 +629,39 @@ void AprilTagDetectorNode::cameraCaptureLoop() {
         
         auto detections = detector_->detect(frame);
 
+        // Collect poses for all relevant tags
+        TagPose pose_id0, pose_id1, pose_id2;
+        bool id0_found = false, id1_found = false, id2_found = false;
+
         for (const auto& det : detections) {
-            if (det.id != target_tag_id_) continue;
+            double conf;
+            TagPose pose_f = estimateSingleTag(det.corners, *pose_estimator_, conf);
 
-            // === Factory intrinsics estimation ===
-            TagPose pose_factory = pose_estimator_->estimatePoseIterative(det.corners);
-            double conf_factory = 1.0;
-            if (pose_factory.valid && enable_compensation_) {
-                TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
-                    det.corners,
-                    cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                pose_factory.translation = error_compensation_->compensateAll(
-                    pose_factory.translation, pose_factory.rotation, det.corners,
-                    cv::Mat(pose_estimator_->getCameraParameters().camera_matrix));
-                conf_factory = metrics.confidence;
-            }
-
-            // === Calibrated intrinsics estimation ===
-            TagPose pose_calib;
-            double conf_calib = 1.0;
-            bool calib_valid = false;
-            if (calib_params_loaded_ && pose_estimator_calib_) {
-                pose_calib = pose_estimator_calib_->estimatePoseIterative(det.corners);
-                if (pose_calib.valid && enable_compensation_) {
-                    TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
-                        det.corners,
-                        cv::Mat(calib_params_.camera_matrix));
-                    pose_calib.translation = error_compensation_->compensateAll(
-                        pose_calib.translation, pose_calib.rotation, det.corners,
-                        cv::Mat(calib_params_.camera_matrix));
-                    conf_calib = metrics.confidence;
+            if (det.id == base_tag_id_0_) {
+                id0_found = pose_f.valid; pose_id0 = pose_f;
+            } else if (det.id == base_tag_id_1_) {
+                id1_found = pose_f.valid; pose_id1 = pose_f;
+            } else if (det.id == target_tag_id_) {
+                id2_found = pose_f.valid; pose_id2 = pose_f;
+                if (pose_f.valid) {
+                    auto hdr = std_msgs::msg::Header();
+                    hdr.stamp = this->now(); hdr.frame_id = camera_frame_;
+                    publishDetection(det, pose_f, hdr);
+                    if (publish_marker_) publishMarker(pose_f, hdr);
+                    if (publish_tf_) publishTransform(pose_f, hdr);
                 }
-                calib_valid = pose_calib.valid;
             }
+        }
 
-            // === Print comparison ===
+        // Relative pose
+        if (enable_relative_pose_ && id0_found && id2_found) {
+            cv::Vec3d rel_t, rel_r; double dist;
+            computeRelativePose(pose_id0, pose_id2, rel_t, rel_r, dist);
+            auto hdr = std_msgs::msg::Header();
+            hdr.stamp = this->now(); hdr.frame_id = camera_frame_;
+            publishRelativePose(rel_t, rel_r, dist, id0_found, id1_found, id2_found, hdr);
             if (print_precise_pose_) {
-                if (calib_valid) {
-                    printPoseComparison(pose_factory, pose_calib, conf_factory, conf_calib);
-                } else if (pose_factory.valid) {
-                    printPosePrecise(pose_factory, conf_factory);
-                }
-            }
-
-            // === Publish using factory params (default) ===
-            if (pose_factory.valid) {
-                auto header = std_msgs::msg::Header();
-                header.stamp = this->now();
-                header.frame_id = camera_frame_;
-                publishDetection(det, pose_factory, header);
-                if (publish_marker_) publishMarker(pose_factory, header);
-                if (publish_tf_) publishTransform(pose_factory, header);
+                printRelativePose(pose_id0, pose_id1, pose_id2, id0_found, id1_found, id2_found);
             }
         }
         
@@ -812,9 +843,133 @@ void AprilTagDetectorNode::printPoseComparison(
 void AprilTagDetectorNode::processDetection(
     const AprilTagDetection& det,
     const std_msgs::msg::Header& header) {
-    // Placeholder: detection processing is done inline in imageCallback / cameraCaptureLoop
     (void)det;
     (void)header;
+}
+
+TagPose AprilTagDetectorNode::estimateSingleTag(
+    const std::vector<cv::Point2f>& corners,
+    PoseEstimator& estimator, double& confidence) {
+
+    confidence = 1.0;
+    TagPose pose = estimator.estimatePoseIterative(corners);
+
+    if (pose.valid && enable_compensation_) {
+        TagQualityMetrics metrics = error_compensation_->computeQualityMetrics(
+            corners,
+            cv::Mat(estimator.getCameraParameters().camera_matrix));
+        pose.translation = error_compensation_->compensateAll(
+            pose.translation, pose.rotation, corners,
+            cv::Mat(estimator.getCameraParameters().camera_matrix));
+        confidence = metrics.confidence;
+    }
+    return pose;
+}
+
+void AprilTagDetectorNode::computeRelativePose(
+    const TagPose& pose_base, const TagPose& pose_target,
+    cv::Vec3d& rel_t, cv::Vec3d& rel_r, double& distance) {
+
+    // T_cam→base = [R_base | t_base], we want T_base→target
+    // R_rel = R_base^T * R_target
+    // t_rel = R_base^T * (t_target - t_base)
+
+    cv::Mat R_base, R_target;
+    cv::Rodrigues(pose_base.rotation, R_base);
+    cv::Rodrigues(pose_target.rotation, R_target);
+
+    cv::Mat R_rel = R_base.t() * R_target;
+    cv::Mat t_rel = R_base.t() * (cv::Mat(pose_target.translation) - cv::Mat(pose_base.translation));
+
+    cv::Rodrigues(R_rel, rel_r);
+
+    rel_t = cv::Vec3d(t_rel.at<double>(0), t_rel.at<double>(1), t_rel.at<double>(2));
+    distance = std::sqrt(rel_t[0]*rel_t[0] + rel_t[1]*rel_t[1] + rel_t[2]*rel_t[2]);
+}
+
+void AprilTagDetectorNode::printRelativePose(
+    const TagPose& pose_id0, const TagPose& pose_id1,
+    const TagPose& pose_id2,
+    bool id0_found, bool id1_found, bool id2_found) {
+
+    cv::Vec3d rel_t, rel_r;
+    double distance;
+    computeRelativePose(pose_id0, pose_id2, rel_t, rel_r, distance);
+
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(3);
+    ss << "\n╔══════════════════════════════════════════════════════════════╗\n";
+    ss << "║  3-Tag System: ID" << base_tag_id_0_ << "(base) → ID" << target_tag_id_ << "(target)";
+    if (id1_found) ss << "  [ID" << base_tag_id_1_ << " aux]";
+    ss << "\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+    ss << "║  Tags: ID0=" << (id0_found?"✅":"❌")
+       << "  ID1=" << (id1_found?"✅":"❌")
+       << "  ID2=" << (id2_found?"✅":"❌") << "\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+
+    // ID0 camera-frame pose
+    ss << "║  Camera → ID0:  X=" << std::setw(8) << pose_id0.translation[0]*1000.0 << " mm"
+       << "  Y=" << std::setw(8) << pose_id0.translation[1]*1000.0 << " mm"
+       << "  Z=" << std::setw(8) << pose_id0.translation[2]*1000.0 << " mm\n";
+    ss << "║  Camera → ID2:  X=" << std::setw(8) << pose_id2.translation[0]*1000.0 << " mm"
+       << "  Y=" << std::setw(8) << pose_id2.translation[1]*1000.0 << " mm"
+       << "  Z=" << std::setw(8) << pose_id2.translation[2]*1000.0 << " mm\n";
+    ss << "╠══════════════════════════════════════════════════════════════╣\n";
+    ss << "║  ★ ID2 → ID0 (relative):\n";
+    ss << "║     Position:  X=" << std::setw(8) << rel_t[0]*1000.0 << " mm"
+       << "  Y=" << std::setw(8) << rel_t[1]*1000.0 << " mm"
+       << "  Z=" << std::setw(8) << rel_t[2]*1000.0 << " mm\n";
+    ss << "║     Distance:  " << std::setw(8) << distance*1000.0 << " mm\n";
+    ss << "║     Rotation:  Rx=" << std::setw(7) << rel_r[0]*180.0/M_PI << "°"
+       << "  Ry=" << std::setw(7) << rel_r[1]*180.0/M_PI << "°"
+       << "  Rz=" << std::setw(7) << rel_r[2]*180.0/M_PI << "°\n";
+
+    if (id1_found) {
+        // Also compute ID0→ID1 for verification
+        cv::Mat R_base, R_id1;
+        cv::Rodrigues(pose_id0.rotation, R_base);
+        cv::Rodrigues(pose_id1.rotation, R_id1);
+        cv::Mat t_check = R_base.t() * (cv::Mat(pose_id1.translation) - cv::Mat(pose_id0.translation));
+        double check_dist = cv::norm(t_check);
+        ss << "║  ID0→ID1 (check): " << std::setw(7) << check_dist*1000.0 << " mm";
+        if (std::abs(check_dist - 0.1587) < 0.02) ss << " ✓";
+        else ss << " ⚠ (expected ~158.7mm)";
+        ss << "\n";
+    }
+    ss << "╚══════════════════════════════════════════════════════════════╝\n";
+
+    RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+}
+
+void AprilTagDetectorNode::publishRelativePose(
+    const cv::Vec3d& rel_t, const cv::Vec3d& rel_r,
+    double distance, bool id0_found, bool id1_found, bool id2_found,
+    const std_msgs::msg::Header& header) {
+
+    auto msg = std::make_unique<geometry_msgs::msg::PoseStamped>();
+    msg->header = header;
+    msg->header.frame_id = "base_tag_" + std::to_string(base_tag_id_0_);
+
+    msg->pose.position.x = rel_t[0];
+    msg->pose.position.y = rel_t[1];
+    msg->pose.position.z = rel_t[2];
+
+    double angle = cv::norm(rel_r);
+    if (angle > 1e-6) {
+        cv::Vec3d axis = rel_r / angle;
+        tf2::Quaternion q(
+            axis[0] * sin(angle / 2), axis[1] * sin(angle / 2),
+            axis[2] * sin(angle / 2), cos(angle / 2));
+        msg->pose.orientation.x = q.x();
+        msg->pose.orientation.y = q.y();
+        msg->pose.orientation.z = q.z();
+        msg->pose.orientation.w = q.w();
+    } else {
+        msg->pose.orientation.w = 1.0;
+    }
+
+    relative_pose_pub_->publish(std::move(msg));
 }
 
 }
