@@ -137,6 +137,7 @@ def generate_launch_description():
                 'prefer_calibrated': prefer_calibrated,
                 'filter_window': filter_window,
                 'filter_alpha': filter_alpha,
+                'enable_undistort': True,
             }],
             remappings=[
                 ('zed/left/image_rect_color', '/zed/zed_node/left/image_rect_color'),

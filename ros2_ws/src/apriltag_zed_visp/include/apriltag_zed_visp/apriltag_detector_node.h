@@ -164,6 +164,11 @@ private:
     std::unique_ptr<PoseEstimator> pose_estimator_;
     std::unique_ptr<PoseEstimator> pose_estimator_calib_;  // calibrated intrinsics
     std::unique_ptr<ErrorCompensation> error_compensation_;
+
+    // Undistortion maps (computed from calibrated intrinsics)
+    cv::Mat undist_map_x_, undist_map_y_;
+    bool undist_map_ready_;
+    bool enable_undistort_;
     
     sensor_msgs::msg::Image::ConstSharedPtr last_left_image_;
     sensor_msgs::msg::Image::ConstSharedPtr last_right_image_;
@@ -190,6 +195,7 @@ private:
     bool prefer_calibrated_;
     std::string calib_file_path_;
     CameraParameters calib_params_;
+    CameraParameters factory_params_original_;  // saved for reference
 
     // Relative pose filtering
     int filter_window_;

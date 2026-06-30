@@ -14,6 +14,8 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     , camera_info_received_(false)
     , camera_params_set_(false)
     , calib_params_loaded_(false)
+    , undist_map_ready_(false)
+    , enable_undistort_(true)
     , running_(true)
     , use_direct_camera_(false)
     , camera_device_id_(0)
@@ -79,6 +81,11 @@ AprilTagDetectorNode::AprilTagDetectorNode()
     calib_file_path_ = this->get_parameter("calib_file").as_string();
     if (!calib_file_path_.empty()) {
         if (loadCalibrationYAML(calib_file_path_, calib_params_)) {
+            // If undistortion is enabled, zero out distortion (image is remapped)
+            if (enable_undistort_) {
+                calib_params_.dist_coeffs = cv::Mat::zeros(
+                    calib_params_.dist_coeffs.rows, 1, CV_64F);
+            }
             if (pose_estimator_calib_) {
                 pose_estimator_calib_->setCameraParameters(calib_params_);
             }
@@ -88,6 +95,7 @@ AprilTagDetectorNode::AprilTagDetectorNode()
             RCLCPP_INFO(this->get_logger(), "  Calib fx=%.2f, fy=%.2f, cx=%.2f, cy=%.2f",
                         calib_params_.fx(), calib_params_.fy(),
                         calib_params_.cx(), calib_params_.cy());
+            RCLCPP_INFO(this->get_logger(), "  Calib distortion zeroed (undistortion enabled)");
         } else {
             RCLCPP_WARN(this->get_logger(), "Failed to load calibration file: %s",
                         calib_file_path_.c_str());
@@ -198,6 +206,7 @@ void AprilTagDetectorNode::declareParameters() {
     this->declare_parameter("prefer_calibrated", true);
     this->declare_parameter("filter_window", 30);
     this->declare_parameter("filter_alpha", 0.15);
+    this->declare_parameter("enable_undistort", true);
 }
 
 void AprilTagDetectorNode::loadBasicParameters() {
@@ -237,6 +246,8 @@ void AprilTagDetectorNode::loadAdvancedParameters() {
     filter_alpha_ = this->get_parameter("filter_alpha").as_double();
     rel_filter_ = RelativePoseFilter(filter_window_, filter_alpha_);
     RCLCPP_INFO(this->get_logger(), "Filter: window=%d, alpha=%.2f", filter_window_, filter_alpha_);
+    enable_undistort_ = this->get_parameter("enable_undistort").as_bool();
+    RCLCPP_INFO(this->get_logger(), "Undistortion: %s", enable_undistort_ ? "ENABLED" : "disabled");
     
     if (use_direct_camera_) {
         CameraParameters params;
@@ -280,23 +291,40 @@ void AprilTagDetectorNode::cameraInfoCallback(
             msg->k[3], msg->k[4], msg->k[5],
             msg->k[6], msg->k[7], msg->k[8]
         );
-        
+
         params.dist_coeffs = cv::Mat(msg->d.size(), 1, CV_64F);
         for (size_t i = 0; i < msg->d.size(); ++i) {
             params.dist_coeffs.at<double>(i) = msg->d[i];
         }
-        
+
         params.image_width = msg->width;
         params.image_height = msg->height;
-        
-        pose_estimator_->setCameraParameters(params);
+
+        // Save original (for reference)
+        factory_params_original_ = params;
+
+        // Compute undistortion map and create zero-distortion copy
+        cv::Mat K(params.camera_matrix);
+        cv::initUndistortRectifyMap(
+            K, params.dist_coeffs, cv::Mat(), K,
+            cv::Size(msg->width, msg->height),
+            CV_16SC2, undist_map_x_, undist_map_y_);
+        undist_map_ready_ = true;
+
+        // Set factory estimator to zero distortion (image will be remapped)
+        CameraParameters params_undist = params;
+        params_undist.dist_coeffs = cv::Mat::zeros(5, 1, CV_64F);
+        pose_estimator_->setCameraParameters(params_undist);
         error_compensation_->setImageDimensions(msg->width, msg->height);
-        
+
         camera_params_set_ = true;
-        
-        RCLCPP_INFO(this->get_logger(), 
-            "Camera parameters set: fx=%.2f, fy=%.2f, cx=%.2f, cy=%.2f",
-            params.fx(), params.fy(), params.cx(), params.cy());
+
+        RCLCPP_INFO(this->get_logger(),
+            "Camera params set: fx=%.2f, fy=%.2f, cx=%.2f, cy=%.2f | distortion=%zu coeffs",
+            params.fx(), params.fy(), params.cx(), params.cy(), msg->d.size());
+        RCLCPP_INFO(this->get_logger(),
+            "Undistortion map computed (%dx%d) — detection on undistorted image",
+            msg->width, msg->height);
     }
     
     camera_frame_ = msg->header.frame_id;
@@ -317,6 +345,12 @@ void AprilTagDetectorNode::imageCallback(
             msg, sensor_msgs::image_encodings::BGR8);
 
         cv::Mat image = cv_ptr->image;
+
+        // === Undistort image: eliminates edge/skew distortion residuals ===
+        if (enable_undistort_ && undist_map_ready_) {
+            cv::remap(image, image, undist_map_x_, undist_map_y_, cv::INTER_LINEAR);
+        }
+
         auto detections = detector_->detect(image);
 
         // Collect poses for all relevant tags
