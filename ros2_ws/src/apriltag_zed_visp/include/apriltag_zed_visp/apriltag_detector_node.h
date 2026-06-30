@@ -81,6 +81,26 @@ struct RelativePoseFilter {
         rz = lowPass(trimmedMean(hist_rz), last_rz);
     }
 
+    double stdDev(const std::deque<double>& data) {
+        if (data.size() < 2) return 0.0;
+        double mean = 0.0;
+        for (double v : data) mean += v;
+        mean /= data.size();
+        double var = 0.0;
+        for (double v : data) var += (v - mean) * (v - mean);
+        return std::sqrt(var / (data.size() - 1));
+    }
+
+    void getFluctuation(double& std_x, double& std_y, double& std_z,
+                        double& std_rx, double& std_ry, double& std_rz) {
+        std_x = stdDev(hist_x);
+        std_y = stdDev(hist_y);
+        std_z = stdDev(hist_z);
+        std_rx = stdDev(hist_rx);
+        std_ry = stdDev(hist_ry);
+        std_rz = stdDev(hist_rz);
+    }
+
     bool isReady() const { return static_cast<int>(hist_x.size()) >= max_size / 3; }
 };
 

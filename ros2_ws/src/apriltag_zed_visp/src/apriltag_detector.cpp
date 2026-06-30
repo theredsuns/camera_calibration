@@ -387,7 +387,7 @@ void AprilTagDetectorNode::imageCallback(
                 // Use original (unfiltered) values for print to see raw accuracy
                 printRelativePose(pose_id0, pose_id1, pose_id2,
                                  id0_found, id1_found, id2_found);
-                // Show filtered value
+                // Show filtered value + fluctuation
                 std::stringstream ss;
                 ss << std::fixed << std::setprecision(3);
                 ss << "  Filtered (n=" << (rel_filter_.isReady() ? "✓" : "⏳") << "): "
@@ -396,6 +396,19 @@ void AprilTagDetectorNode::imageCallback(
                    << " Z=" << std::setw(8) << fz*1000.0 << " mm"
                    << " dist=" << std::setw(8) << dist_filt*1000.0 << " mm";
                 RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+
+                // Show per-axis fluctuation (standard deviation)
+                double sx, sy, sz, srx, sry, srz;
+                rel_filter_.getFluctuation(sx, sy, sz, srx, sry, srz);
+                std::stringstream sf;
+                sf << std::fixed << std::setprecision(4);
+                sf << "  Noise σ:  pos(XYZ)=" << std::setw(7) << sx*1000.0 << " "
+                   << std::setw(7) << sy*1000.0 << " "
+                   << std::setw(7) << sz*1000.0 << " mm  |  "
+                   << "rot(RxRyRz)=" << std::setw(6) << srx*180.0/M_PI << "° "
+                   << std::setw(6) << sry*180.0/M_PI << "° "
+                   << std::setw(6) << srz*180.0/M_PI << "°";
+                RCLCPP_INFO(this->get_logger(), "%s", sf.str().c_str());
                 RCLCPP_INFO(this->get_logger(), "  Using: %s",
                             (prefer_calibrated_ && id0_calib_valid) ? "CALIBRATED" : "ZED Factory");
             }
