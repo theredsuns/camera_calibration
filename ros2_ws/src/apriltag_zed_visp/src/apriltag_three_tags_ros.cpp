@@ -573,21 +573,17 @@ int main(int argc, char** argv) {
                         }
                     }
 
-                    Mat R_id0 = rvecToMatrix(id0_rvec);
+                    // EMA-filter ID0 rotation (orientation changes slowly, PnP noise is fast)
+                    static Vec3d id0_rvec_filt(0,0,0);
+                    static bool id0_rvec_init = false;
+                    if (!id0_rvec_init) { id0_rvec_filt = id0_rvec; id0_rvec_init = true; }
+                    id0_rvec_filt = 0.15 * id0_rvec + 0.85 * id0_rvec_filt;
+                    Mat R_id0 = rvecToMatrix(id0_rvec_filt);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
 
                     Mat R_rel = R_id0.t() * R_id2;
                     Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
 
-                    // Use ID1 to cancel rotation error (ID0 and ID1 have same orientation)
-                    // Any measured rotation between them = PnP noise → undo it
-                    if (id1_found) {
-                        Mat R_id1_raw = rvecToMatrix(id1_rvec);
-                        Mat R_err = R_id0.t() * R_id1_raw;  // should be I
-                        // Undo the error from both rotation and translation
-                        R_rel = R_err.t() * R_rel;
-                        t_rel_raw = R_err.t() * t_rel_raw;
-                    }
 
                     // Apply scale correction
                     Mat t_rel = scale_factor * t_rel_raw;
