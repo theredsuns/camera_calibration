@@ -589,8 +589,11 @@ int main(int argc, char** argv) {
                         }
                         all_img.insert(all_img.end(), corners_id1.begin(), corners_id1.end());
                         Vec3d rvec, tvec;
-                        solvePnP(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec, false, SOLVEPNP_IPPE);
-                        solvePnPRefineLM(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec);
+                        // Run IPPE on ID0 4 corners first (IPPE requires exactly 4), then refine with all 8
+                        vector<Point2f> id0_img4(corners_id0.begin(), corners_id0.end());
+                        solvePnP(id0_obj, id0_img4, camera_matrix, dist_coeffs, rvec, tvec, false, SOLVEPNP_IPPE);
+                        solvePnPRefineLM(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec,
+                                         TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 100, 1e-10));
                         R_id0 = rvecToMatrix(rvec);
                         id0_tvec_improved = tvec;
                     } else {
