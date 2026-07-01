@@ -278,7 +278,10 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
                     double id1_x, double id1_y, double id1_z,
                     double rel_x, double rel_y, double rel_z,
                     double rel_rx, double rel_ry, double rel_rz,
-                    double rel_distance, bool stable) {
+                    double rel_distance, bool stable,
+                    double rel1_x, double rel1_y, double rel1_z,
+                    double rel1_rx, double rel1_ry, double rel1_rz,
+                    double rel1_dist) {
     system("clear");
     
     cout << "==================================================" << endl;
@@ -322,6 +325,18 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
         cout << "                Rz: " << rel_rz * 180.0 / CV_PI << "°" << endl;
     } else {
         cout << "  请确保 ID0 和 ID2 标签在视野内..." << endl;
+    }
+
+    if (id0_found && id1_found) {
+        cout << endl;
+        cout << "  ID1 相对于 ID0 的位姿 (基准坐标系):" << endl;
+        cout << "    位置 (mm):  X: " << rel1_x * 1000 << endl;
+        cout << "                Y: " << rel1_y * 1000 << endl;
+        cout << "                Z: " << rel1_z * 1000 << endl;
+        cout << "    距离:      " << rel1_dist * 1000 << " mm" << endl;
+        cout << "    姿态 (度): Rx: " << rel1_rx * 180.0 / CV_PI << "°" << endl;
+        cout << "                Ry: " << rel1_ry * 180.0 / CV_PI << "°" << endl;
+        cout << "                Rz: " << rel1_rz * 180.0 / CV_PI << "°" << endl;
     }
     cout << endl;
     cout << "  话题数据: [x, y, z, distance, rx, ry, rz, id0_ok, id1_ok, id2_ok]" << endl;
@@ -586,6 +601,19 @@ int main(int argc, char** argv) {
                     relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z, 
                                                smooth_rx, smooth_ry, smooth_rz, smooth_dist);
 
+                    // Compute ID1→ID0 relative pose
+                    double r1x=0, r1y=0, r1z=0, r1rx=0, r1ry=0, r1rz=0, r1d=0;
+                    if (id1_found) {
+                        Mat R_id0_m = rvecToMatrix(id0_rvec);
+                        Mat R_id1_m = rvecToMatrix(id1_rvec);
+                        Mat t1 = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
+                        r1x = t1.at<double>(0,0); r1y = t1.at<double>(1,0); r1z = t1.at<double>(2,0);
+                        r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
+                        Mat R_rel1 = R_id0_m.t() * R_id1_m;
+                        Vec3d rr1 = matrixToRvec(R_rel1);
+                        r1rx = rr1[0]; r1ry = rr1[1]; r1rz = rr1[2];
+                    }
+
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
                                        id0_tvec[0], id0_tvec[1], id0_tvec[2],
@@ -594,7 +622,8 @@ int main(int argc, char** argv) {
                                        id1_found ? id1_tvec[2] : 0,
                                        smooth_x, smooth_y, smooth_z,
                                        smooth_rx, smooth_ry, smooth_rz,
-                                       smooth_dist, relative_filter.isStable());
+                                       smooth_dist, relative_filter.isStable(),
+                                       r1x, r1y, r1z, r1rx, r1ry, r1rz, r1d);
                     }
 
                     node->publishRelative(
@@ -622,13 +651,18 @@ int main(int argc, char** argv) {
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
                     if (id1_found) {
-                        double id0_to_id1_dist = cv::norm(id1_tvec - id0_tvec) * 1000;
                         stringstream ss3;
                         ss3 << fixed << setprecision(1);
-                        ss3 << "ID0->ID1 Check: " << id0_to_id1_dist << "mm (期望: " 
-                            << ID0_TO_ID1_X * 1000 << "mm)";
-                        putText(frame, ss3.str(), Point(20, 80), 
+                        ss3 << "ID1->ID0: " << r1d * 1000 << "mm (ref " << ID0_TO_ID1_X*1000 << "mm)";
+                        putText(frame, ss3.str(), Point(20, 75),
+                               FONT_HERSHEY_SIMPLEX, 0.5, Scalar(200, 200, 200), 1);
+                        stringstream ss4;
+                        ss4 << "  X=" << r1x*1000 << " Y=" << r1y*1000 << " Z=" << r1z*1000 << " mm";
+                        putText(frame, ss4.str(), Point(20, 93),
                                FONT_HERSHEY_SIMPLEX, 0.4, Scalar(200, 200, 200), 1);
+                    } else {
+                        putText(frame, "ID1: not in view", Point(20, 75),
+                               FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
                     }
                 }
             }
