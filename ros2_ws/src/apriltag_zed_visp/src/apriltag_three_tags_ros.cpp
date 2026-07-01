@@ -473,7 +473,8 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(40, 0.12);  // balanced: smooth but still tracks
+    AdvancedFilter relative_filter(40, 0.12);    // ID2→ID0 filter
+    AdvancedFilter id1_filter(80, 0.03);          // ID1→ID0 filter (fixed geometry, very heavy)
 
     // Adaptive filtering: track raw relative pose velocity for assembly detection
     Vec3d prev_raw_rel_t(0, 0, 0);
@@ -601,17 +602,20 @@ int main(int argc, char** argv) {
                     relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z, 
                                                smooth_rx, smooth_ry, smooth_rz, smooth_dist);
 
-                    // Compute ID1→ID0 relative pose
+                    // Compute ID1→ID0 relative pose + filter
                     double r1x=0, r1y=0, r1z=0, r1rx=0, r1ry=0, r1rz=0, r1d=0;
                     if (id1_found) {
                         Mat R_id0_m = rvecToMatrix(id0_rvec);
                         Mat R_id1_m = rvecToMatrix(id1_rvec);
                         Mat t1 = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
-                        r1x = t1.at<double>(0,0); r1y = t1.at<double>(1,0); r1z = t1.at<double>(2,0);
-                        r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
+                        double raw_x=t1.at<double>(0,0), raw_y=t1.at<double>(1,0), raw_z=t1.at<double>(2,0);
+                        double raw_d = sqrt(raw_x*raw_x + raw_y*raw_y + raw_z*raw_z);
                         Mat R_rel1 = R_id0_m.t() * R_id1_m;
                         Vec3d rr1 = matrixToRvec(R_rel1);
-                        r1rx = rr1[0]; r1ry = rr1[1]; r1rz = rr1[2];
+                        id1_filter.add(raw_x, raw_y, raw_z, rr1[0], rr1[1], rr1[2], raw_d);
+                        double fd;
+                        id1_filter.getSmoothed(r1x, r1y, r1z, r1rx, r1ry, r1rz, fd);
+                        r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
                     }
 
                     if (frame_count % 3 == 0) {
