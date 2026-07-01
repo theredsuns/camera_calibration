@@ -278,10 +278,7 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
                     double id1_x, double id1_y, double id1_z,
                     double rel_x, double rel_y, double rel_z,
                     double rel_rx, double rel_ry, double rel_rz,
-                    double rel_distance, bool stable,
-                    double rel1_x, double rel1_y, double rel1_z,
-                    double rel1_rx, double rel1_ry, double rel1_rz,
-                    double rel1_dist) {
+                    double rel_distance, bool stable) {
     system("clear");
     
     cout << "==================================================" << endl;
@@ -325,18 +322,6 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
         cout << "                Rz: " << rel_rz * 180.0 / CV_PI << "°" << endl;
     } else {
         cout << "  请确保 ID0 和 ID2 标签在视野内..." << endl;
-    }
-
-    if (id0_found && id1_found) {
-        cout << endl;
-        cout << "  ID1 相对于 ID0 的位姿 (基准坐标系):" << endl;
-        cout << "    位置 (mm):  X: " << rel1_x * 1000 << endl;
-        cout << "                Y: " << rel1_y * 1000 << endl;
-        cout << "                Z: " << rel1_z * 1000 << endl;
-        cout << "    距离:      " << rel1_dist * 1000 << " mm" << endl;
-        cout << "    姿态 (度): Rx: " << rel1_rx * 180.0 / CV_PI << "°" << endl;
-        cout << "                Ry: " << rel1_ry * 180.0 / CV_PI << "°" << endl;
-        cout << "                Rz: " << rel1_rz * 180.0 / CV_PI << "°" << endl;
     }
     cout << endl;
     cout << "  话题数据: [x, y, z, distance, rx, ry, rz, id0_ok, id1_ok, id2_ok]" << endl;
@@ -484,7 +469,6 @@ int main(int argc, char** argv) {
     Vec3d id0_tvec, id0_rvec;
     Vec3d id1_tvec, id1_rvec;
     Vec3d id2_tvec, id2_rvec;
-    vector<Point2f> corners_id0, corners_id1;  // stored for combined PnP
 
     Mat frame;
     sl::Mat zed_img;
@@ -524,14 +508,12 @@ int main(int argc, char** argv) {
                         id0_found = true;
                         id0_tvec = tvecs[i];
                         id0_rvec = rvecs[i];
-                        corners_id0 = corners[i];
                         axis_color = Scalar(0, 255, 0);
                         tag_label = "ID0 (基准)";
                     } else if (ids[i] == BASE_TAG_ID_1) {
                         id1_found = true;
                         id1_tvec = tvecs[i];
                         id1_rvec = rvecs[i];
-                        corners_id1 = corners[i];
                         axis_color = Scalar(255, 0, 255);
                         tag_label = "ID1 (辅助)";
                     } else if (ids[i] == TARGET_TAG_ID) {
@@ -554,56 +536,24 @@ int main(int argc, char** argv) {
                 if (id0_found && id2_found) {
                     frame_count++;
 
-                    // Use improved ID0 pose when ID1 is visible
-                    Vec3d id0_tvec_improved = id0_tvec;
-
                     // Scale correction using known ID0→ID1 distance as reference ruler
                     double scale_factor = 1.0;
                     if (id1_found) {
-                        double measured_d01 = norm(id1_tvec - id0_tvec_improved);
+                        double measured_d01 = norm(id1_tvec - id0_tvec);
                         double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
                                                 ID0_TO_ID1_Y*ID0_TO_ID1_Y +
                                                 ID0_TO_ID1_Z*ID0_TO_ID1_Z);
                         if (measured_d01 > 0.01 && known_d01 > 0) {
                             scale_factor = known_d01 / measured_d01;
-                            // Clamp: reject obvious outliers (>5% deviation)
                             if (scale_factor < 0.95 || scale_factor > 1.05) scale_factor = 1.0;
                         }
                     }
 
-                    Mat R_id0, R_id2;
+                    Mat R_id0 = rvecToMatrix(id0_rvec);
+                    Mat R_id2 = rvecToMatrix(id2_rvec);
 
-                    // If ID1 is visible: use ID0+ID1 corners together for better ID0 pose
-                    if (id1_found) {
-                        // ArUco corner order: TL, TR, BR, BL
-                        //   TL=(-h, +h)  TR=(+h, +h)  BR=(+h, -h)  BL=(-h, -h)
-                        double h = TAG_SIZE / 2;
-                        vector<Point3f> id0_obj = {
-                            {-h,  h, 0}, { h,  h, 0}, { h, -h, 0}, {-h, -h, 0}
-                        };
-                        vector<Point3f> all_obj = id0_obj;
-                        vector<Point2f> all_img(corners_id0.begin(), corners_id0.end());
-                        // ID1 corners offset by [158.7, 0, 0] in ID0 frame
-                        for (auto& p : id0_obj) {
-                            all_obj.push_back(Point3f(p.x + ID0_TO_ID1_X, p.y, p.z));
-                        }
-                        all_img.insert(all_img.end(), corners_id1.begin(), corners_id1.end());
-                        Vec3d rvec, tvec;
-                        // Run IPPE on ID0 4 corners first (IPPE requires exactly 4), then refine with all 8
-                        vector<Point2f> id0_img4(corners_id0.begin(), corners_id0.end());
-                        solvePnP(id0_obj, id0_img4, camera_matrix, dist_coeffs, rvec, tvec, false, SOLVEPNP_IPPE);
-                        solvePnPRefineLM(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec,
-                                         TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 100, 1e-10));
-                        R_id0 = rvecToMatrix(rvec);
-                        id0_tvec_improved = tvec;
-                    } else {
-                        R_id0 = rvecToMatrix(id0_rvec);
-                    }
-                    R_id2 = rvecToMatrix(id2_rvec);
-
-                    // Use combined-PnP ID0 rotation directly (8 corners = stable enough)
                     Mat R_rel = R_id0.t() * R_id2;
-                    Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec_improved));
+                    Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
 
                     // Apply scale correction
                     Mat t_rel = scale_factor * t_rel_raw;
@@ -633,35 +583,18 @@ int main(int argc, char** argv) {
 
                     double smooth_x, smooth_y, smooth_z;
                     double smooth_rx, smooth_ry, smooth_rz, smooth_dist;
-                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z,
+                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z, 
                                                smooth_rx, smooth_ry, smooth_rz, smooth_dist);
-
-                    // Compute ID1 relative to ID0 (for display / verification)
-                    double rel1_x = 0, rel1_y = 0, rel1_z = 0;
-                    double rel1_rx = 0, rel1_ry = 0, rel1_rz = 0, rel1_dist = 0;
-                    if (id1_found) {
-                        Mat t_rel1 = R_id0.t() * (Mat(id1_tvec) - Mat(id0_tvec_improved));
-                        rel1_x = t_rel1.at<double>(0,0);
-                        rel1_y = t_rel1.at<double>(1,0);
-                        rel1_z = t_rel1.at<double>(2,0);
-                        rel1_dist = sqrt(rel1_x*rel1_x + rel1_y*rel1_y + rel1_z*rel1_z);
-                        Mat R_id1 = rvecToMatrix(id1_rvec);
-                        Mat R_rel1 = R_id0.t() * R_id1;
-                        Vec3d r_rel1 = matrixToRvec(R_rel1);
-                        rel1_rx = r_rel1[0]; rel1_ry = r_rel1[1]; rel1_rz = r_rel1[2];
-                    }
 
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
-                                       id0_tvec_improved[0], id0_tvec_improved[1], id0_tvec_improved[2],
+                                       id0_tvec[0], id0_tvec[1], id0_tvec[2],
                                        id1_found ? id1_tvec[0] : 0,
                                        id1_found ? id1_tvec[1] : 0,
                                        id1_found ? id1_tvec[2] : 0,
                                        smooth_x, smooth_y, smooth_z,
                                        smooth_rx, smooth_ry, smooth_rz,
-                                       smooth_dist, relative_filter.isStable(),
-                                       rel1_x, rel1_y, rel1_z,
-                                       rel1_rx, rel1_ry, rel1_rz, rel1_dist);
+                                       smooth_dist, relative_filter.isStable());
                     }
 
                     node->publishRelative(
@@ -673,45 +606,30 @@ int main(int argc, char** argv) {
 
                     Vec3d smooth_rvec_vis(smooth_rx, smooth_ry, smooth_rz);
                     
-                    // ID2 → ID0
                     stringstream ss;
                     ss << fixed << setprecision(1);
-                    ss << "ID2->ID0: " << smooth_dist * 1000 << "mm"
+                    ss << "ID2->ID0 Dist: " << smooth_dist * 1000 << "mm"
                        << (assembly_moving ? " [MOVING]" : " [STILL]");
-                    if (id1_found && fabs(scale_factor - 1.0) > 0.001)
-                        ss << "  s=" << setprecision(4) << scale_factor;
-                    ss << setprecision(1);
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
                            assembly_moving ? Scalar(0, 255, 0) : Scalar(0, 255, 255), 2);
 
                     stringstream ss2;
-                    ss2 << "  X=" << smooth_x * 1000
-                        << " Y=" << smooth_y * 1000
-                        << " Z=" << smooth_z * 1000 << " mm";
-                    putText(frame, ss2.str(), Point(20, 55),
+                    ss2 << "X: " << smooth_x * 1000 
+                        << " Y: " << smooth_y * 1000 
+                        << " Z: " << smooth_z * 1000 << " mm";
+                    putText(frame, ss2.str(), Point(20, 55), 
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
-                    // ID1 → ID0
                     if (id1_found) {
+                        double id0_to_id1_dist = cv::norm(id1_tvec - id0_tvec) * 1000;
                         stringstream ss3;
                         ss3 << fixed << setprecision(1);
-                        ss3 << "ID1->ID0: " << rel1_dist * 1000 << "mm"
-                            << "  (ref ~158.7mm)";
-                        putText(frame, ss3.str(), Point(20, 75),
-                               FONT_HERSHEY_SIMPLEX, 0.55, Scalar(200, 200, 200), 1);
-
-                        stringstream ss4;
-                        ss4 << "  X=" << rel1_x * 1000
-                            << " Y=" << rel1_y * 1000
-                            << " Z=" << rel1_z * 1000 << " mm";
-                        putText(frame, ss4.str(), Point(20, 95),
-                               FONT_HERSHEY_SIMPLEX, 0.45, Scalar(200, 200, 200), 1);
-                    } else {
-                        putText(frame, "ID1: MISSING (need ID1 in view)", Point(20, 75),
-                               FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
+                        ss3 << "ID0->ID1 Check: " << id0_to_id1_dist << "mm (期望: " 
+                            << ID0_TO_ID1_X * 1000 << "mm)";
+                        putText(frame, ss3.str(), Point(20, 80), 
+                               FONT_HERSHEY_SIMPLEX, 0.4, Scalar(200, 200, 200), 1);
                     }
-
                 }
             }
 
