@@ -664,30 +664,39 @@ int main(int argc, char** argv) {
 
                     Vec3d smooth_rvec_vis(smooth_rx, smooth_ry, smooth_rz);
                     
+                    // ID2 → ID0
                     stringstream ss;
                     ss << fixed << setprecision(1);
-                    ss << "ID2->ID0 Dist: " << smooth_dist * 1000 << "mm"
+                    ss << "ID2->ID0: " << smooth_dist * 1000 << "mm"
                        << (assembly_moving ? " [MOVING]" : " [STILL]");
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
                            assembly_moving ? Scalar(0, 255, 0) : Scalar(0, 255, 255), 2);
 
                     stringstream ss2;
-                    ss2 << "X: " << smooth_x * 1000 
-                        << " Y: " << smooth_y * 1000 
-                        << " Z: " << smooth_z * 1000 << " mm";
-                    putText(frame, ss2.str(), Point(20, 55), 
+                    ss2 << "  X=" << smooth_x * 1000
+                        << " Y=" << smooth_y * 1000
+                        << " Z=" << smooth_z * 1000 << " mm";
+                    putText(frame, ss2.str(), Point(20, 55),
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
+                    // ID1 → ID0
                     if (id1_found) {
-                        double id0_to_id1_dist = cv::norm(id1_tvec - id0_tvec) * 1000;
                         stringstream ss3;
                         ss3 << fixed << setprecision(1);
-                        ss3 << "ID0->ID1 Check: " << id0_to_id1_dist << "mm (期望: " 
-                            << ID0_TO_ID1_X * 1000 << "mm)";
-                        putText(frame, ss3.str(), Point(20, 80), 
-                               FONT_HERSHEY_SIMPLEX, 0.4, Scalar(200, 200, 200), 1);
+                        ss3 << "ID1->ID0: " << rel1_dist * 1000 << "mm"
+                            << "  (ref ~158.7mm)";
+                        putText(frame, ss3.str(), Point(20, 75),
+                               FONT_HERSHEY_SIMPLEX, 0.55, Scalar(200, 200, 200), 1);
+
+                        stringstream ss4;
+                        ss4 << "  X=" << rel1_x * 1000
+                            << " Y=" << rel1_y * 1000
+                            << " Z=" << rel1_z * 1000 << " mm";
+                        putText(frame, ss4.str(), Point(20, 95),
+                               FONT_HERSHEY_SIMPLEX, 0.45, Scalar(200, 200, 200), 1);
                     }
+
                 }
             }
 
