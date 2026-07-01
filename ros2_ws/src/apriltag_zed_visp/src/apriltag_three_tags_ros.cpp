@@ -278,7 +278,10 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
                     double id1_x, double id1_y, double id1_z,
                     double rel_x, double rel_y, double rel_z,
                     double rel_rx, double rel_ry, double rel_rz,
-                    double rel_distance, bool stable) {
+                    double rel_distance, bool stable,
+                    double rel1_x, double rel1_y, double rel1_z,
+                    double rel1_rx, double rel1_ry, double rel1_rz,
+                    double rel1_dist) {
     system("clear");
     
     cout << "==================================================" << endl;
@@ -322,6 +325,18 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
         cout << "                Rz: " << rel_rz * 180.0 / CV_PI << "°" << endl;
     } else {
         cout << "  请确保 ID0 和 ID2 标签在视野内..." << endl;
+    }
+
+    if (id0_found && id1_found) {
+        cout << endl;
+        cout << "  ID1 相对于 ID0 的位姿 (基准坐标系):" << endl;
+        cout << "    位置 (mm):  X: " << rel1_x * 1000 << endl;
+        cout << "                Y: " << rel1_y * 1000 << endl;
+        cout << "                Z: " << rel1_z * 1000 << endl;
+        cout << "    距离:      " << rel1_dist * 1000 << " mm" << endl;
+        cout << "    姿态 (度): Rx: " << rel1_rx * 180.0 / CV_PI << "°" << endl;
+        cout << "                Ry: " << rel1_ry * 180.0 / CV_PI << "°" << endl;
+        cout << "                Rz: " << rel1_rz * 180.0 / CV_PI << "°" << endl;
     }
     cout << endl;
     cout << "  话题数据: [x, y, z, distance, rx, ry, rz, id0_ok, id1_ok, id2_ok]" << endl;
@@ -609,8 +624,23 @@ int main(int argc, char** argv) {
 
                     double smooth_x, smooth_y, smooth_z;
                     double smooth_rx, smooth_ry, smooth_rz, smooth_dist;
-                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z, 
+                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z,
                                                smooth_rx, smooth_ry, smooth_rz, smooth_dist);
+
+                    // Compute ID1 relative to ID0 (for display / verification)
+                    double rel1_x = 0, rel1_y = 0, rel1_z = 0;
+                    double rel1_rx = 0, rel1_ry = 0, rel1_rz = 0, rel1_dist = 0;
+                    if (id1_found) {
+                        Mat t_rel1 = R_id0_filtered.t() * (Mat(id1_tvec) - Mat(id0_tvec));
+                        rel1_x = t_rel1.at<double>(0,0);
+                        rel1_y = t_rel1.at<double>(1,0);
+                        rel1_z = t_rel1.at<double>(2,0);
+                        rel1_dist = sqrt(rel1_x*rel1_x + rel1_y*rel1_y + rel1_z*rel1_z);
+                        Mat R_id1 = rvecToMatrix(id1_rvec);
+                        Mat R_rel1 = R_id0_filtered.t() * R_id1;
+                        Vec3d r_rel1 = matrixToRvec(R_rel1);
+                        rel1_rx = r_rel1[0]; rel1_ry = r_rel1[1]; rel1_rz = r_rel1[2];
+                    }
 
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
@@ -620,7 +650,9 @@ int main(int argc, char** argv) {
                                        id1_found ? id1_tvec[2] : 0,
                                        smooth_x, smooth_y, smooth_z,
                                        smooth_rx, smooth_ry, smooth_rz,
-                                       smooth_dist, relative_filter.isStable());
+                                       smooth_dist, relative_filter.isStable(),
+                                       rel1_x, rel1_y, rel1_z,
+                                       rel1_rx, rel1_ry, rel1_rz, rel1_dist);
                     }
 
                     node->publishRelative(
