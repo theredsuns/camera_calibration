@@ -473,7 +473,7 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(20, 0.35);  // fast response for assembly tracking
+    AdvancedFilter relative_filter(40, 0.12);  // balanced: smooth but still tracks
 
     // Adaptive filtering: track raw relative pose velocity for assembly detection
     Vec3d prev_raw_rel_t(0, 0, 0);
