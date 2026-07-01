@@ -394,25 +394,32 @@ int main(int argc, char** argv) {
 
     Mat camera_matrix = (Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
 
-    // Build ZED factory dist_coeffs (used only for remap)
-    Mat zed_dist_coeffs = (Mat_<double>(5, 1) <<
-        zed_params.disto[0], zed_params.disto[1],
-        zed_params.disto[2], zed_params.disto[3],
-        zed_params.disto[4]);
+    // Choose distortion for remap: if calibrated, use calibrated distortion
+    Mat remap_dist;
+    if (use_calib && !dist_coeffs_full.empty()) {
+        remap_dist = dist_coeffs_full.clone();
+        cout << "✅ 去畸变使用标定畸变系数 (" << dist_coeffs_full.total() << " coeffs)" << endl;
+    } else {
+        remap_dist = (Mat_<double>(5, 1) <<
+            zed_params.disto[0], zed_params.disto[1],
+            zed_params.disto[2], zed_params.disto[3],
+            zed_params.disto[4]);
+        cout << "⚠️ 去畸变使用 ZED 出厂畸变系数" << endl;
+    }
 
-    // Pre-compute undistortion map (always use ZED factory distortion since we need to rectify the raw image)
+    // Pre-compute undistortion map
     auto cam_info = zed.getCameraInformation().camera_configuration.resolution;
     int img_w = static_cast<int>(cam_info.width);
     int img_h = static_cast<int>(cam_info.height);
     Mat undist_map_x, undist_map_y;
-    cv::initUndistortRectifyMap(camera_matrix, zed_dist_coeffs, Mat(), camera_matrix,
+    cv::initUndistortRectifyMap(camera_matrix, remap_dist, Mat(), camera_matrix,
                                 Size(img_w, img_h),
                                 CV_16SC2, undist_map_x, undist_map_y);
 
     // PnP uses ZERO distortion (image already remapped)
     Mat dist_coeffs = Mat::zeros(5, 1, CV_64F);
     cout << "✅ 去畸变映射已计算 → PnP 使用零畸变模型" << endl;
-    cout << "✅ 使用内参: " << (use_calib ? "标定" : "ZED出厂") << endl;
+    cout << "✅ 使用内参: " << (use_calib ? "标定 (内参+畸变均来自标定)" : "ZED出厂") << endl;
 
     Ptr<aruco::Dictionary> dictionary = 
         aruco::getPredefinedDictionary(aruco::DICT_APRILTAG_36h11);
@@ -496,13 +503,28 @@ int main(int argc, char** argv) {
                 if (id0_found && id2_found) {
                     frame_count++;
 
+                    // Scale correction using known ID0→ID1 distance
+                    double scale_factor = 1.0;
+                    if (id1_found) {
+                        double measured_d01 = norm(id1_tvec - id0_tvec);
+                        double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
+                                                ID0_TO_ID1_Y*ID0_TO_ID1_Y +
+                                                ID0_TO_ID1_Z*ID0_TO_ID1_Z);
+                        if (measured_d01 > 0.01 && known_d01 > 0) {
+                            scale_factor = known_d01 / measured_d01;
+                            // Clamp to reasonable range
+                            if (scale_factor < 0.7 || scale_factor > 1.3) scale_factor = 1.0;
+                        }
+                    }
+
                     Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
 
-                    Mat T_id0_inv = inverseTransform(R_id0, Mat(id0_tvec));
-
                     Mat R_rel = R_id0.t() * R_id2;
-                    Mat t_rel = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
+                    Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
+
+                    // Apply scale correction
+                    Mat t_rel = scale_factor * t_rel_raw;
 
                     Vec3d rel_rvec = matrixToRvec(R_rel);
                     double rel_distance = norm(t_rel);
