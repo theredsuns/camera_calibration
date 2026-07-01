@@ -599,8 +599,18 @@ int main(int argc, char** argv) {
 
                     double smooth_x, smooth_y, smooth_z;
                     double smooth_rx, smooth_ry, smooth_rz, smooth_dist;
-                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z, 
+                    relative_filter.getSmoothed(smooth_x, smooth_y, smooth_z,
                                                smooth_rx, smooth_ry, smooth_rz, smooth_dist);
+
+                    // Extra angle smoothing (EMA) for stability within 0.5°
+                    static double arx=0, ary=0, arz=0;
+                    static bool aang_init = false;
+                    if (!aang_init) { arx=smooth_rx; ary=smooth_ry; arz=smooth_rz; aang_init=true; }
+                    const double AA = 0.25;
+                    arx = AA * smooth_rx + (1-AA) * arx;
+                    ary = AA * smooth_ry + (1-AA) * ary;
+                    arz = AA * smooth_rz + (1-AA) * arz;
+                    smooth_rx = arx; smooth_ry = ary; smooth_rz = arz;
 
                     // Compute ID1→ID0 relative pose + filter
                     double r1x=0, r1y=0, r1z=0, r1rx=0, r1ry=0, r1rz=0, r1d=0;
