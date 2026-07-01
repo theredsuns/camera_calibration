@@ -469,8 +469,8 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(30, 0.10);    // ID2→ID0
-    AdvancedFilter id1_filter(30, 0.10);          // ID1→ID0
+    AdvancedFilter relative_filter(80, 0.03);    // ID2→ID0: very heavy for Z stability
+    AdvancedFilter id1_filter(80, 0.03);          // ID1→ID0
 
     // Adaptive filtering: track raw relative pose velocity for assembly detection
     Vec3d prev_raw_rel_t(0, 0, 0);
@@ -595,7 +595,7 @@ int main(int argc, char** argv) {
                     static double arx=0, ary=0, arz=0;
                     static bool aang_init = false;
                     if (!aang_init) { arx=smooth_rx; ary=smooth_ry; arz=smooth_rz; aang_init=true; }
-                    const double AA = 0.10;
+                    const double AA = 0.04;
                     arx = AA * smooth_rx + (1-AA) * arx;
                     ary = AA * smooth_ry + (1-AA) * ary;
                     arz = AA * smooth_rz + (1-AA) * arz;
