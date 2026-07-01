@@ -473,8 +473,8 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(40, 0.12);    // ID2→ID0 filter
-    AdvancedFilter id1_filter(80, 0.03);          // ID1→ID0 filter (fixed geometry, very heavy)
+    AdvancedFilter relative_filter(15, 0.30);    // ID2→ID0: responsive for assembly
+    AdvancedFilter id1_filter(20, 0.20);          // ID1→ID0: smooth but alive
 
     // Adaptive filtering: track raw relative pose velocity for assembly detection
     Vec3d prev_raw_rel_t(0, 0, 0);
