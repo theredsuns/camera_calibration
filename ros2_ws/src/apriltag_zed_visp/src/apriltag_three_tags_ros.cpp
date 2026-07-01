@@ -695,6 +695,9 @@ int main(int argc, char** argv) {
                             << " Z=" << rel1_z * 1000 << " mm";
                         putText(frame, ss4.str(), Point(20, 95),
                                FONT_HERSHEY_SIMPLEX, 0.45, Scalar(200, 200, 200), 1);
+                    } else {
+                        putText(frame, "ID1: MISSING (need ID1 in view)", Point(20, 75),
+                               FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
                     }
 
                 }
