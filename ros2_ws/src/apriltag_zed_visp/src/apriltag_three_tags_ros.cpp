@@ -557,19 +557,19 @@ int main(int argc, char** argv) {
                 if (id0_found && id2_found) {
                     frame_count++;
 
-                    // Scale correction using known ID0→ID1 distance
-                    // (disabled during motion — adds noise when PnP is unstable)
+                    // Scale correction using known ID0→ID1 distance as reference ruler
                     double scale_factor = 1.0;
-                    // if (id1_found && relative_filter.isStable()) {
-                    //     double measured_d01 = norm(id1_tvec - id0_tvec);
-                    //     double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
-                    //                             ID0_TO_ID1_Y*ID0_TO_ID1_Y +
-                    //                             ID0_TO_ID1_Z*ID0_TO_ID1_Z);
-                    //     if (measured_d01 > 0.01 && known_d01 > 0) {
-                    //         scale_factor = known_d01 / measured_d01;
-                    //         if (scale_factor < 0.95 || scale_factor > 1.05) scale_factor = 1.0;
-                    //     }
-                    // }
+                    if (id1_found) {
+                        double measured_d01 = norm(id1_tvec - id0_tvec);
+                        double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
+                                                ID0_TO_ID1_Y*ID0_TO_ID1_Y +
+                                                ID0_TO_ID1_Z*ID0_TO_ID1_Z);
+                        if (measured_d01 > 0.01 && known_d01 > 0) {
+                            scale_factor = known_d01 / measured_d01;
+                            // Clamp: reject obvious outliers (>5% deviation)
+                            if (scale_factor < 0.95 || scale_factor > 1.05) scale_factor = 1.0;
+                        }
+                    }
 
                     Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
@@ -669,6 +669,9 @@ int main(int argc, char** argv) {
                     ss << fixed << setprecision(1);
                     ss << "ID2->ID0: " << smooth_dist * 1000 << "mm"
                        << (assembly_moving ? " [MOVING]" : " [STILL]");
+                    if (id1_found && fabs(scale_factor - 1.0) > 0.001)
+                        ss << "  s=" << setprecision(4) << scale_factor;
+                    ss << setprecision(1);
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
                            assembly_moving ? Scalar(0, 255, 0) : Scalar(0, 255, 255), 2);
