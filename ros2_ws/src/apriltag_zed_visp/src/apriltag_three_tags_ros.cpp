@@ -34,6 +34,11 @@ const double ID0_TO_ID1_X = 0.1587;
 const double ID0_TO_ID1_Y = 0.000;
 const double ID0_TO_ID1_Z = 0.000;
 
+// Global display strings (populated at startup)
+string g_intrinsics_source = "???";
+string g_intrinsics_values = "";
+string g_distortion_info = "";
+
 class AdvancedFilter {
 private:
     deque<double> history;
@@ -250,6 +255,9 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
     cout << "==================================================" << endl;
     cout << "   三标签基准系统 (ID0+ID1 -> ID2)              " << endl;
     cout << "==================================================" << endl;
+    cout << "  内参来源: " << g_intrinsics_source << endl;
+    cout << "  内参值:   " << g_intrinsics_values << endl;
+    cout << "  " << g_distortion_info << endl;
     cout << "  基准标签: ID0 (主) + ID1 (辅助稳定)" << endl;
     cout << "  目标标签: ID2" << endl;
     cout << "  ROS DOMAIN ID: " << ROS_DOMAIN_ID << endl;
@@ -364,6 +372,7 @@ int main(int argc, char** argv) {
             use_calib = true;
             cout << "✅ 标定内参已加载: fx=" << fx << " fy=" << fy
                  << " cx=" << cx << " cy=" << cy << endl;
+            g_intrinsics_source = "标定 (chessboard)";
             dist_coeffs_full = Mat(static_cast<int>(D.size()), 1, CV_64F);
             for (size_t i = 0; i < D.size(); ++i) dist_coeffs_full.at<double>(static_cast<int>(i)) = D[i];
         }
@@ -372,7 +381,16 @@ int main(int argc, char** argv) {
         fx = zed_params.fx; fy = zed_params.fy;
         cx = zed_params.cx; cy = zed_params.cy;
         cout << "⚠️ 未找到标定文件，使用 ZED 出厂内参" << endl;
+        g_intrinsics_source = "ZED 出厂 (factory)";
     }
+
+    {
+        stringstream ss;
+        ss << fixed << setprecision(2);
+        ss << "fx=" << fx << " fy=" << fy << " cx=" << cx << " cy=" << cy;
+        g_intrinsics_values = ss.str();
+    }
+    g_distortion_info = "去畸变: ON (remap + 零畸变PnP)";
 
     Mat camera_matrix = (Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
 
