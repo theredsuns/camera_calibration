@@ -490,6 +490,7 @@ int main(int argc, char** argv) {
     Vec3d id0_tvec, id0_rvec;
     Vec3d id1_tvec, id1_rvec;
     Vec3d id2_tvec, id2_rvec;
+    vector<Point2f> corners_id0, corners_id1;  // stored for combined PnP
 
     Mat frame;
     sl::Mat zed_img;
@@ -529,12 +530,14 @@ int main(int argc, char** argv) {
                         id0_found = true;
                         id0_tvec = tvecs[i];
                         id0_rvec = rvecs[i];
+                        corners_id0 = corners[i];
                         axis_color = Scalar(0, 255, 0);
                         tag_label = "ID0 (基准)";
                     } else if (ids[i] == BASE_TAG_ID_1) {
                         id1_found = true;
                         id1_tvec = tvecs[i];
                         id1_rvec = rvecs[i];
+                        corners_id1 = corners[i];
                         axis_color = Scalar(255, 0, 255);
                         tag_label = "ID1 (辅助)";
                     } else if (ids[i] == TARGET_TAG_ID) {
@@ -557,10 +560,13 @@ int main(int argc, char** argv) {
                 if (id0_found && id2_found) {
                     frame_count++;
 
+                    // Use improved ID0 pose when ID1 is visible
+                    Vec3d id0_tvec_improved = id0_tvec;
+
                     // Scale correction using known ID0→ID1 distance as reference ruler
                     double scale_factor = 1.0;
                     if (id1_found) {
-                        double measured_d01 = norm(id1_tvec - id0_tvec);
+                        double measured_d01 = norm(id1_tvec - id0_tvec_improved);
                         double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
                                                 ID0_TO_ID1_Y*ID0_TO_ID1_Y +
                                                 ID0_TO_ID1_Z*ID0_TO_ID1_Z);
@@ -571,8 +577,34 @@ int main(int argc, char** argv) {
                         }
                     }
 
-                    Mat R_id0 = rvecToMatrix(id0_rvec);
-                    Mat R_id2 = rvecToMatrix(id2_rvec);
+                    Mat R_id0, R_id2;
+
+                    // If ID1 is visible: use ID0+ID1 corners together for better ID0 pose
+                    if (id1_found) {
+                        // Build combined object points: ID0 corners + ID1 corners (offset by [158.7, 0, 0])
+                        vector<Point3f> obj_pts = {
+                            {-TAG_SIZE/2, -TAG_SIZE/2, 0}, { TAG_SIZE/2, -TAG_SIZE/2, 0},
+                            { TAG_SIZE/2,  TAG_SIZE/2, 0}, {-TAG_SIZE/2,  TAG_SIZE/2, 0}
+                        };
+                        vector<Point3f> all_obj;
+                        vector<Point2f> all_img;
+                        for (auto& p : obj_pts) {
+                            all_obj.push_back(p);
+                            all_img.push_back(corners_id0[&p - &obj_pts[0]]);
+                        }
+                        for (auto& p : obj_pts) {
+                            all_obj.push_back(Point3f(p.x + ID0_TO_ID1_X, p.y, p.z));
+                            all_img.push_back(corners_id1[&p - &obj_pts[0]]);
+                        }
+                        Vec3d rvec, tvec;
+                        solvePnP(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec, false, SOLVEPNP_IPPE);
+                        solvePnPRefineLM(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec);
+                        R_id0 = rvecToMatrix(rvec);
+                        id0_tvec_improved = tvec;
+                    } else {
+                        R_id0 = rvecToMatrix(id0_rvec);
+                    }
+                    R_id2 = rvecToMatrix(id2_rvec);
 
                     // Heavy-filter ID0 rotation (small PnP angle jitter × baseline = large Z noise)
                     if (!R_id0_filtered_valid) {
@@ -592,9 +624,9 @@ int main(int argc, char** argv) {
                         R_id0_filtered = U * Vt;
                     }
 
-                    // Use filtered rotation for relative pose computation
+                    // Use filtered rotation + improved translation for relative pose
                     Mat R_rel = R_id0_filtered.t() * R_id2;
-                    Mat t_rel_raw = R_id0_filtered.t() * (Mat(id2_tvec) - Mat(id0_tvec));
+                    Mat t_rel_raw = R_id0_filtered.t() * (Mat(id2_tvec) - Mat(id0_tvec_improved));
 
                     // Apply scale correction
                     Mat t_rel = scale_factor * t_rel_raw;
@@ -631,7 +663,7 @@ int main(int argc, char** argv) {
                     double rel1_x = 0, rel1_y = 0, rel1_z = 0;
                     double rel1_rx = 0, rel1_ry = 0, rel1_rz = 0, rel1_dist = 0;
                     if (id1_found) {
-                        Mat t_rel1 = R_id0_filtered.t() * (Mat(id1_tvec) - Mat(id0_tvec));
+                        Mat t_rel1 = R_id0_filtered.t() * (Mat(id1_tvec) - Mat(id0_tvec_improved));
                         rel1_x = t_rel1.at<double>(0,0);
                         rel1_y = t_rel1.at<double>(1,0);
                         rel1_z = t_rel1.at<double>(2,0);
@@ -644,7 +676,7 @@ int main(int argc, char** argv) {
 
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
-                                       id0_tvec[0], id0_tvec[1], id0_tvec[2],
+                                       id0_tvec_improved[0], id0_tvec_improved[1], id0_tvec_improved[2],
                                        id1_found ? id1_tvec[0] : 0,
                                        id1_found ? id1_tvec[1] : 0,
                                        id1_found ? id1_tvec[2] : 0,
