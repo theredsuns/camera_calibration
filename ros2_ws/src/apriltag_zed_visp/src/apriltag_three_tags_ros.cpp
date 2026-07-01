@@ -623,11 +623,7 @@ int main(int argc, char** argv) {
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
                     if (id1_found && id1_filter.isStable()) {
-                        // Translation: subtract known bias
-                        corr_x -= (r1x - ID0_TO_ID1_X);
-                        corr_y -= (r1y - ID0_TO_ID1_Y);
-                        corr_z -= (r1z - ID0_TO_ID1_Z);
-                        // Rotation: undo ID0 orientation error (R_err = R_id1_filtered)
+                        // Rotation only: undo ID0 orientation error (translation sign depends on tag mounting)
                         Mat R_err;
                         Rodrigues(Vec3d(r1rx, r1ry, r1rz), R_err);
                         Mat R_smooth;
