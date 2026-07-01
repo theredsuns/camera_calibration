@@ -352,7 +352,7 @@ int main(int argc, char** argv) {
     sl::Camera zed;
     sl::InitParameters init_params;
     init_params.camera_resolution = sl::RESOLUTION::HD720;
-    init_params.depth_mode = sl::DEPTH_MODE::NONE;
+    init_params.depth_mode = sl::DEPTH_MODE::PERFORMANCE;
     init_params.camera_fps = 30;
 
     sl::ERROR_CODE err = zed.open(init_params);
@@ -491,7 +491,13 @@ int main(int argc, char** argv) {
     while (rclcpp::ok()) {
         if (zed.grab() == sl::ERROR_CODE::SUCCESS) {
             zed.retrieveImage(zed_img, sl::VIEW::LEFT);
-            
+            // Retrieve depth map for Z stabilization (raw coordinates)
+            sl::Mat depth_map;
+            zed.retrieveMeasure(depth_map, sl::MEASURE::DEPTH);
+            Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<sl::uchar1>());
+            Mat depth_undist;
+            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_LINEAR);
+
             Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
             cvtColor(cv_img, frame, COLOR_BGRA2BGR);
 
@@ -528,6 +534,19 @@ int main(int argc, char** argv) {
                     double h = tag_sz / 2;
                     vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
                     solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
+
+                    // ZED depth fusion: sample depth at tag center, blend with PnP Z
+                    Point2f center(0,0);
+                    for (auto& c : corners[i]) center += c;
+                    center *= 0.25f;
+                    if (center.x >= 0 && center.x < depth_undist.cols &&
+                        center.y >= 0 && center.y < depth_undist.rows) {
+                        float d = depth_undist.at<float>((int)center.y, (int)center.x);
+                        if (d > 0 && std::isfinite(d) && std::abs(d - tv[2]) < 0.2) {
+                            tv[2] = tv[2] * 0.3 + d * 0.7;  // 70% depth, 30% PnP
+                        }
+                    }
+
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
                     else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
                     else { id2_rvec = rv; id2_tvec = tv; }
