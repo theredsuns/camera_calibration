@@ -81,16 +81,10 @@ public:
             return;
         }
 
-        // Outlier rejection: skip if jump from last filtered is > 3 sigma
+        // Outlier rejection: skip only if jump is unrealistically large (PnP failure)
         double jump_dist = sqrt(pow(x - last_x, 2) + pow(y - last_y, 2) + pow(z - last_z, 2)) * 1000.0;
         double jump_rot = sqrt(pow(rx - last_rx, 2) + pow(ry - last_ry, 2) + pow(rz - last_rz, 2)) * 180.0 / M_PI;
-
-        if (history_x.size() >= 5) {
-            double std_dist = getStdDev(history) * 1000.0; // mm
-            double std_rot = getStdDev(history_rx) * 180.0 / M_PI; // deg
-            if (std_dist > 0.01 && jump_dist > std_dist * 6.0) return; // outlier, skip
-            if (std_rot > 0.001 && jump_rot > std_rot * 6.0) return;
-        }
+        if (jump_dist > 30.0 || jump_rot > 10.0) return; // absolute threshold: >30mm or >10° = PnP failure
 
         history.push_back(distance);
         history_x.push_back(x);
@@ -473,8 +467,8 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(50, 0.06);    // ID2→ID0: strong smooth
-    AdvancedFilter id1_filter(50, 0.06);          // ID1→ID0: strong smooth
+    AdvancedFilter relative_filter(30, 0.10);    // ID2→ID0
+    AdvancedFilter id1_filter(30, 0.10);          // ID1→ID0
 
     // Adaptive filtering: track raw relative pose velocity for assembly detection
     Vec3d prev_raw_rel_t(0, 0, 0);
