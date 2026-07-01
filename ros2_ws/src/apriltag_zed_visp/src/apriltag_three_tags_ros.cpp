@@ -479,12 +479,6 @@ int main(int argc, char** argv) {
     Vec3d prev_raw_rel_t(0, 0, 0);
     bool prev_raw_valid = false;
 
-    // Heavy filter for ID0 rotation (orientation changes slowly, but PnP noise is large)
-    // Small rotation errors × large baseline = large position noise in relative pose
-    Mat R_id0_filtered = Mat::eye(3, 3, CV_64F);
-    bool R_id0_filtered_valid = false;
-    const double R_ID0_ALPHA = 0.04;  // very heavy smoothing for rotation
-
     int frame_count = 0;
     bool id0_found = false, id1_found = false, id2_found = false;
     Vec3d id0_tvec, id0_rvec;
@@ -604,27 +598,9 @@ int main(int argc, char** argv) {
                     }
                     R_id2 = rvecToMatrix(id2_rvec);
 
-                    // Heavy-filter ID0 rotation (small PnP angle jitter × baseline = large Z noise)
-                    if (!R_id0_filtered_valid) {
-                        R_id0_filtered = R_id0.clone();
-                        R_id0_filtered_valid = true;
-                    } else {
-                        // Quaternion EMA: convert to quat, blend, normalize
-                        // R_filtered = R_filtered * exp(R_ID0_ALPHA * log(R_filtered^T * R_raw))
-                        Mat R_diff = R_id0_filtered.t() * R_id0;
-                        Vec3d diff_rvec = matrixToRvec(R_diff);
-                        Mat R_step;
-                        Rodrigues(R_ID0_ALPHA * diff_rvec, R_step);
-                        R_id0_filtered = R_id0_filtered * R_step;
-                        // Ensure orthogonality
-                        Mat U, Vt, W;
-                        SVDecomp(R_id0_filtered, W, U, Vt);
-                        R_id0_filtered = U * Vt;
-                    }
-
-                    // Use filtered rotation + improved translation for relative pose
-                    Mat R_rel = R_id0_filtered.t() * R_id2;
-                    Mat t_rel_raw = R_id0_filtered.t() * (Mat(id2_tvec) - Mat(id0_tvec_improved));
+                    // Use combined-PnP ID0 rotation directly (8 corners = stable enough)
+                    Mat R_rel = R_id0.t() * R_id2;
+                    Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec_improved));
 
                     // Apply scale correction
                     Mat t_rel = scale_factor * t_rel_raw;
@@ -661,13 +637,13 @@ int main(int argc, char** argv) {
                     double rel1_x = 0, rel1_y = 0, rel1_z = 0;
                     double rel1_rx = 0, rel1_ry = 0, rel1_rz = 0, rel1_dist = 0;
                     if (id1_found) {
-                        Mat t_rel1 = R_id0_filtered.t() * (Mat(id1_tvec) - Mat(id0_tvec_improved));
+                        Mat t_rel1 = R_id0.t() * (Mat(id1_tvec) - Mat(id0_tvec_improved));
                         rel1_x = t_rel1.at<double>(0,0);
                         rel1_y = t_rel1.at<double>(1,0);
                         rel1_z = t_rel1.at<double>(2,0);
                         rel1_dist = sqrt(rel1_x*rel1_x + rel1_y*rel1_y + rel1_z*rel1_z);
                         Mat R_id1 = rvecToMatrix(id1_rvec);
-                        Mat R_rel1 = R_id0_filtered.t() * R_id1;
+                        Mat R_rel1 = R_id0.t() * R_id1;
                         Vec3d r_rel1 = matrixToRvec(R_rel1);
                         rel1_rx = r_rel1[0]; rel1_ry = r_rel1[1]; rel1_rz = r_rel1[2];
                     }
