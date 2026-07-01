@@ -581,21 +581,19 @@ int main(int argc, char** argv) {
 
                     // If ID1 is visible: use ID0+ID1 corners together for better ID0 pose
                     if (id1_found) {
-                        // Build combined object points: ID0 corners + ID1 corners (offset by [158.7, 0, 0])
-                        vector<Point3f> obj_pts = {
-                            {-TAG_SIZE/2, -TAG_SIZE/2, 0}, { TAG_SIZE/2, -TAG_SIZE/2, 0},
-                            { TAG_SIZE/2,  TAG_SIZE/2, 0}, {-TAG_SIZE/2,  TAG_SIZE/2, 0}
+                        // ArUco corner order: TL, TR, BR, BL
+                        //   TL=(-h, +h)  TR=(+h, +h)  BR=(+h, -h)  BL=(-h, -h)
+                        double h = TAG_SIZE / 2;
+                        vector<Point3f> id0_obj = {
+                            {-h,  h, 0}, { h,  h, 0}, { h, -h, 0}, {-h, -h, 0}
                         };
-                        vector<Point3f> all_obj;
-                        vector<Point2f> all_img;
-                        for (auto& p : obj_pts) {
-                            all_obj.push_back(p);
-                            all_img.push_back(corners_id0[&p - &obj_pts[0]]);
-                        }
-                        for (auto& p : obj_pts) {
+                        vector<Point3f> all_obj = id0_obj;
+                        vector<Point2f> all_img(corners_id0.begin(), corners_id0.end());
+                        // ID1 corners offset by [158.7, 0, 0] in ID0 frame
+                        for (auto& p : id0_obj) {
                             all_obj.push_back(Point3f(p.x + ID0_TO_ID1_X, p.y, p.z));
-                            all_img.push_back(corners_id1[&p - &obj_pts[0]]);
                         }
+                        all_img.insert(all_img.end(), corners_id1.begin(), corners_id1.end());
                         Vec3d rvec, tvec;
                         solvePnP(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec, false, SOLVEPNP_IPPE);
                         solvePnPRefineLM(all_obj, all_img, camera_matrix, dist_coeffs, rvec, tvec);
