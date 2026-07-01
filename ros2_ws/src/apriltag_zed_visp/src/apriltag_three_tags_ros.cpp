@@ -579,6 +579,16 @@ int main(int argc, char** argv) {
                     Mat R_rel = R_id0.t() * R_id2;
                     Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
 
+                    // Use ID1 to cancel rotation error (ID0 and ID1 have same orientation)
+                    // Any measured rotation between them = PnP noise → undo it
+                    if (id1_found) {
+                        Mat R_id1_raw = rvecToMatrix(id1_rvec);
+                        Mat R_err = R_id0.t() * R_id1_raw;  // should be I
+                        // Undo the error from both rotation and translation
+                        R_rel = R_err.t() * R_rel;
+                        t_rel_raw = R_err.t() * t_rel_raw;
+                    }
+
                     // Apply scale correction
                     Mat t_rel = scale_factor * t_rel_raw;
 
@@ -636,19 +646,9 @@ int main(int argc, char** argv) {
                         r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
                     }
 
-                    // Correct ID2→ID0 using ID1→ID0 error (measured rotation = ID0 orientation error)
+                    // Already corrected pre-filter via raw ID1→ID0 rotation
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
-                    if (id1_found && id1_filter.isStable()) {
-                        // Undo ID0 orientation error using pre-lock filtered rotation
-                        Mat R_err;
-                        Rodrigues(Vec3d(r1rx, r1ry, r1rz), R_err);
-                        Mat R_smooth;
-                        Rodrigues(Vec3d(smooth_rx, smooth_ry, smooth_rz), R_smooth);
-                        Mat R_corr = R_err.t() * R_smooth;
-                        Vec3d rcorr = matrixToRvec(R_corr);
-                        corr_rx = rcorr[0]; corr_ry = rcorr[1]; corr_rz = rcorr[2];
-                    }
 
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
@@ -674,7 +674,6 @@ int main(int argc, char** argv) {
                     stringstream ss;
                     ss << fixed << setprecision(1);
                     ss << "ID2->ID0: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
-                       << (id1_filter.isStable() ? " [CORR]" : "")
                        << (assembly_moving ? " [MOV]" : "");
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
