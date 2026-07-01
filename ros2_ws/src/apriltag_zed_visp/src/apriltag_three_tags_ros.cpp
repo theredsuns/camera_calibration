@@ -618,14 +618,22 @@ int main(int argc, char** argv) {
                         r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
                     }
 
-                    // Correct ID2→ID0 using filtered ID1→ID0 error
-                    // ID1 true: [0.1587,0,0] rot=[0,0,0] — any deviation is measurement error
+                    // ID1→ID0 is physically fixed → lock to exact values once filter is stable
+                    // Save raw filtered rotation for ID2 correction before locking
+                    double r1rx_saved = r1rx, r1ry_saved = r1ry, r1rz_saved = r1rz;
+                    if (id1_found && id1_filter.isStable()) {
+                        r1x = ID0_TO_ID1_X; r1y = ID0_TO_ID1_Y; r1z = ID0_TO_ID1_Z;
+                        r1rx = 0.0; r1ry = 0.0; r1rz = 0.0;
+                        r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
+                    }
+
+                    // Correct ID2→ID0 using ID1→ID0 error (measured rotation = ID0 orientation error)
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
                     if (id1_found && id1_filter.isStable()) {
-                        // Rotation only: undo ID0 orientation error (translation sign depends on tag mounting)
+                        // Undo ID0 orientation error using pre-lock filtered rotation
                         Mat R_err;
-                        Rodrigues(Vec3d(r1rx, r1ry, r1rz), R_err);
+                        Rodrigues(Vec3d(r1rx_saved, r1ry_saved, r1rz_saved), R_err);
                         Mat R_smooth;
                         Rodrigues(Vec3d(smooth_rx, smooth_ry, smooth_rz), R_smooth);
                         Mat R_corr = R_err.t() * R_smooth;
