@@ -458,13 +458,11 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(60, 0.1);
+    AdvancedFilter relative_filter(20, 0.35);  // fast response for assembly tracking
 
-    // Camera motion detection
-    Vec3d prev_id0_tvec(0, 0, 0);
-    bool prev_id0_valid = false;
-    int frozen_frames = 0;
-    const double MOTION_THRESHOLD = 0.003; // 3mm frame-to-frame = moving
+    // Adaptive filtering: track raw relative pose velocity for assembly detection
+    Vec3d prev_raw_rel_t(0, 0, 0);
+    bool prev_raw_valid = false;
 
     int frame_count = 0;
     bool id0_found = false, id1_found = false, id2_found = false;
@@ -564,28 +562,25 @@ int main(int argc, char** argv) {
                     Vec3d rel_rvec = matrixToRvec(R_rel);
                     double rel_distance = norm(t_rel);
 
-                    // Camera motion gate: freeze filter when camera is moving
-                    bool camera_moving = false;
-                    if (prev_id0_valid) {
-                        double cam_displacement = norm(id0_tvec - prev_id0_tvec);
-                        if (cam_displacement > MOTION_THRESHOLD) {
-                            camera_moving = true;
-                            frozen_frames++;
-                        } else {
-                            frozen_frames = 0;
-                        }
-                    }
-                    prev_id0_tvec = id0_tvec;
-                    prev_id0_valid = true;
+                    // Adaptive: distinguish camera motion (both tags move together)
+                    // from assembly motion (only ID2 moves relative to ID0)
+                    // Strategy: always update filter, but use outlier rejection
+                    // to skip frames corrupted by motion blur
+                    relative_filter.add(
+                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
+                        rel_rvec[0], rel_rvec[1], rel_rvec[2],
+                        rel_distance
+                    );
 
-                    // Only update filter when camera is still (relative pose is constant)
-                    if (!camera_moving || frozen_frames < 3) {
-                        relative_filter.add(
-                            t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
-                            rel_rvec[0], rel_rvec[1], rel_rvec[2],
-                            rel_distance
-                        );
+                    // Track assembly velocity from raw relative pose
+                    Vec3d cur_raw_rel_t(t_rel.at<double>(0,0), t_rel.at<double>(1,0), t_rel.at<double>(2,0));
+                    double assembly_speed = 0.0;
+                    if (prev_raw_valid) {
+                        assembly_speed = norm(cur_raw_rel_t - prev_raw_rel_t) * 1000.0; // mm/frame
                     }
+                    prev_raw_rel_t = cur_raw_rel_t;
+                    prev_raw_valid = true;
+                    bool assembly_moving = (assembly_speed > 1.0); // >1mm/frame = ID2 moving
 
                     double smooth_x, smooth_y, smooth_z;
                     double smooth_rx, smooth_ry, smooth_rz, smooth_dist;
@@ -615,10 +610,10 @@ int main(int argc, char** argv) {
                     stringstream ss;
                     ss << fixed << setprecision(1);
                     ss << "ID2->ID0 Dist: " << smooth_dist * 1000 << "mm"
-                       << (camera_moving ? " [FROZEN]" : "");
+                       << (assembly_moving ? " [MOVING]" : " [STILL]");
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
-                           camera_moving ? Scalar(0, 0, 255) : Scalar(0, 255, 255), 2);
+                           assembly_moving ? Scalar(0, 255, 0) : Scalar(0, 255, 255), 2);
 
                     stringstream ss2;
                     ss2 << "X: " << smooth_x * 1000 
