@@ -618,39 +618,59 @@ int main(int argc, char** argv) {
                         r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
                     }
 
+                    // Correct ID2→ID0 using filtered ID1→ID0 error
+                    // ID1 true: [0.1587,0,0] rot=[0,0,0] — any deviation is measurement error
+                    double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
+                    double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
+                    if (id1_found && id1_filter.isStable()) {
+                        // Translation: subtract known bias
+                        corr_x -= (r1x - ID0_TO_ID1_X);
+                        corr_y -= (r1y - ID0_TO_ID1_Y);
+                        corr_z -= (r1z - ID0_TO_ID1_Z);
+                        // Rotation: undo ID0 orientation error (R_err = R_id1_filtered)
+                        Mat R_err;
+                        Rodrigues(Vec3d(r1rx, r1ry, r1rz), R_err);
+                        Mat R_smooth;
+                        Rodrigues(Vec3d(smooth_rx, smooth_ry, smooth_rz), R_smooth);
+                        Mat R_corr = R_err.t() * R_smooth;
+                        Vec3d rcorr = matrixToRvec(R_corr);
+                        corr_rx = rcorr[0]; corr_ry = rcorr[1]; corr_rz = rcorr[2];
+                    }
+
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
                                        id0_tvec[0], id0_tvec[1], id0_tvec[2],
                                        id1_found ? id1_tvec[0] : 0,
                                        id1_found ? id1_tvec[1] : 0,
                                        id1_found ? id1_tvec[2] : 0,
-                                       smooth_x, smooth_y, smooth_z,
-                                       smooth_rx, smooth_ry, smooth_rz,
+                                       corr_x, corr_y, corr_z,
+                                       corr_rx, corr_ry, corr_rz,
                                        smooth_dist, relative_filter.isStable(),
                                        r1x, r1y, r1z, r1rx, r1ry, r1rz, r1d);
                     }
 
                     node->publishRelative(
-                        smooth_x * 1000, smooth_y * 1000, smooth_z * 1000,
-                        smooth_rx, smooth_ry, smooth_rz,
+                        corr_x * 1000, corr_y * 1000, corr_z * 1000,
+                        corr_rx, corr_ry, corr_rz,
                         smooth_dist * 1000,
                         id0_found, id1_found, id2_found
                     );
 
-                    Vec3d smooth_rvec_vis(smooth_rx, smooth_ry, smooth_rz);
-                    
+                    Vec3d smooth_rvec_vis(corr_rx, corr_ry, corr_rz);
+
                     stringstream ss;
                     ss << fixed << setprecision(1);
-                    ss << "ID2->ID0 Dist: " << smooth_dist * 1000 << "mm"
-                       << (assembly_moving ? " [MOVING]" : " [STILL]");
+                    ss << "ID2->ID0: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
+                       << (id1_filter.isStable() ? " [CORR]" : "")
+                       << (assembly_moving ? " [MOV]" : "");
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
                            assembly_moving ? Scalar(0, 255, 0) : Scalar(0, 255, 255), 2);
 
                     stringstream ss2;
-                    ss2 << "X: " << smooth_x * 1000 
-                        << " Y: " << smooth_y * 1000 
-                        << " Z: " << smooth_z * 1000 << " mm";
+                    ss2 << "X=" << corr_x*1000
+                        << " Y=" << corr_y*1000
+                        << " Z=" << corr_z*1000 << " mm";
                     putText(frame, ss2.str(), Point(20, 55), 
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
