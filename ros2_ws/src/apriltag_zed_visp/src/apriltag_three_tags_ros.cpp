@@ -464,6 +464,12 @@ int main(int argc, char** argv) {
     Vec3d prev_raw_rel_t(0, 0, 0);
     bool prev_raw_valid = false;
 
+    // Heavy filter for ID0 rotation (orientation changes slowly, but PnP noise is large)
+    // Small rotation errors × large baseline = large position noise in relative pose
+    Mat R_id0_filtered = Mat::eye(3, 3, CV_64F);
+    bool R_id0_filtered_valid = false;
+    const double R_ID0_ALPHA = 0.04;  // very heavy smoothing for rotation
+
     int frame_count = 0;
     bool id0_found = false, id1_found = false, id2_found = false;
     Vec3d id0_tvec, id0_rvec;
@@ -553,8 +559,27 @@ int main(int argc, char** argv) {
                     Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
 
-                    Mat R_rel = R_id0.t() * R_id2;
-                    Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
+                    // Heavy-filter ID0 rotation (small PnP angle jitter × baseline = large Z noise)
+                    if (!R_id0_filtered_valid) {
+                        R_id0_filtered = R_id0.clone();
+                        R_id0_filtered_valid = true;
+                    } else {
+                        // Quaternion EMA: convert to quat, blend, normalize
+                        // R_filtered = R_filtered * exp(R_ID0_ALPHA * log(R_filtered^T * R_raw))
+                        Mat R_diff = R_id0_filtered.t() * R_id0;
+                        Vec3d diff_rvec = matrixToRvec(R_diff);
+                        Mat R_step;
+                        Rodrigues(R_ID0_ALPHA * diff_rvec, R_step);
+                        R_id0_filtered = R_id0_filtered * R_step;
+                        // Ensure orthogonality
+                        Mat U, Vt, W;
+                        SVDecomp(R_id0_filtered, W, U, Vt);
+                        R_id0_filtered = U * Vt;
+                    }
+
+                    // Use filtered rotation for relative pose computation
+                    Mat R_rel = R_id0_filtered.t() * R_id2;
+                    Mat t_rel_raw = R_id0_filtered.t() * (Mat(id2_tvec) - Mat(id0_tvec));
 
                     // Apply scale correction
                     Mat t_rel = scale_factor * t_rel_raw;
