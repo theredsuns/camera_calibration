@@ -65,12 +65,31 @@ public:
 
     void add(double x, double y, double z, double rx, double ry, double rz, double distance) {
         lock_guard<mutex> lock(mtx);
-        
+
         if (!initialized) {
             last_filtered = distance;
             last_x = x; last_y = y; last_z = z;
             last_rx = rx; last_ry = ry; last_rz = rz;
             initialized = true;
+            history.push_back(distance);
+            history_x.push_back(x);
+            history_y.push_back(y);
+            history_z.push_back(z);
+            history_rx.push_back(rx);
+            history_ry.push_back(ry);
+            history_rz.push_back(rz);
+            return;
+        }
+
+        // Outlier rejection: skip if jump from last filtered is > 3 sigma
+        double jump_dist = sqrt(pow(x - last_x, 2) + pow(y - last_y, 2) + pow(z - last_z, 2)) * 1000.0;
+        double jump_rot = sqrt(pow(rx - last_rx, 2) + pow(ry - last_ry, 2) + pow(rz - last_rz, 2)) * 180.0 / M_PI;
+
+        if (history_x.size() >= 5) {
+            double std_dist = getStdDev(history) * 1000.0; // mm
+            double std_rot = getStdDev(history_rx) * 180.0 / M_PI; // deg
+            if (std_dist > 0.01 && jump_dist > std_dist * 6.0) return; // outlier, skip
+            if (std_rot > 0.001 && jump_rot > std_rot * 6.0) return;
         }
 
         history.push_back(distance);
@@ -90,6 +109,16 @@ public:
             history_ry.pop_front();
             history_rz.pop_front();
         }
+    }
+
+    double getStdDev(const deque<double>& data) {
+        if (data.size() < 2) return 0.0;
+        double mean = 0.0;
+        for (double v : data) mean += v;
+        mean /= data.size();
+        double var = 0.0;
+        for (double v : data) var += (v - mean) * (v - mean);
+        return sqrt(var / (data.size() - 1));
     }
 
     double getTrimmedMean(const deque<double>& data, double trim_percent = 0.25) {
@@ -504,18 +533,18 @@ int main(int argc, char** argv) {
                     frame_count++;
 
                     // Scale correction using known ID0→ID1 distance
+                    // (disabled during motion — adds noise when PnP is unstable)
                     double scale_factor = 1.0;
-                    if (id1_found) {
-                        double measured_d01 = norm(id1_tvec - id0_tvec);
-                        double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
-                                                ID0_TO_ID1_Y*ID0_TO_ID1_Y +
-                                                ID0_TO_ID1_Z*ID0_TO_ID1_Z);
-                        if (measured_d01 > 0.01 && known_d01 > 0) {
-                            scale_factor = known_d01 / measured_d01;
-                            // Clamp to reasonable range
-                            if (scale_factor < 0.7 || scale_factor > 1.3) scale_factor = 1.0;
-                        }
-                    }
+                    // if (id1_found && relative_filter.isStable()) {
+                    //     double measured_d01 = norm(id1_tvec - id0_tvec);
+                    //     double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
+                    //                             ID0_TO_ID1_Y*ID0_TO_ID1_Y +
+                    //                             ID0_TO_ID1_Z*ID0_TO_ID1_Z);
+                    //     if (measured_d01 > 0.01 && known_d01 > 0) {
+                    //         scale_factor = known_d01 / measured_d01;
+                    //         if (scale_factor < 0.95 || scale_factor > 1.05) scale_factor = 1.0;
+                    //     }
+                    // }
 
                     Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
