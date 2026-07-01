@@ -23,7 +23,9 @@ using namespace std;
 using namespace cv;
 using namespace std::chrono_literals;
 
-const double TAG_SIZE = 0.06;
+const double TAG_SIZE_ID0 = 0.15;  // 15cm
+const double TAG_SIZE_ID1 = 0.15;  // 15cm
+const double TAG_SIZE_ID2 = 0.06;  // 6cm
 const int BASE_TAG_ID_0 = 0;
 const int BASE_TAG_ID_1 = 1;
 const int TARGET_TAG_ID = 2;
@@ -506,38 +508,31 @@ int main(int argc, char** argv) {
             if (!ids.empty()) {
                 aruco::drawDetectedMarkers(frame, corners, ids, Scalar(0, 255, 0));
 
-                vector<Vec3d> rvecs, tvecs;
-                aruco::estimatePoseSingleMarkers(
-                    corners, TAG_SIZE, camera_matrix, dist_coeffs, rvecs, tvecs);
 
                 for (size_t i = 0; i < ids.size(); i++) {
-                    Scalar axis_color;
-                    string tag_label;
-                    
-                    if (ids[i] == BASE_TAG_ID_0) {
-                        id0_found = true;
-                        id0_tvec = tvecs[i];
-                        id0_rvec = rvecs[i];
-                        axis_color = Scalar(0, 255, 0);
-                        tag_label = "ID0 (基准)";
-                    } else if (ids[i] == BASE_TAG_ID_1) {
-                        id1_found = true;
-                        id1_tvec = tvecs[i];
-                        id1_rvec = rvecs[i];
-                        axis_color = Scalar(255, 0, 255);
-                        tag_label = "ID1 (辅助)";
-                    } else if (ids[i] == TARGET_TAG_ID) {
-                        id2_found = true;
-                        id2_tvec = tvecs[i];
-                        id2_rvec = rvecs[i];
-                        axis_color = Scalar(0, 0, 255);
-                        tag_label = "ID2 (目标)";
-                    } else {
-                        continue;
-                    }
+                    Scalar axis_color; string tag_label; double tag_sz;
+                    Vec3d rv, tv;
 
-                    aruco::drawAxis(frame, camera_matrix, dist_coeffs, 
-                                   rvecs[i], tvecs[i], TAG_SIZE * 0.5);
+                    if (ids[i] == BASE_TAG_ID_0) {
+                        id0_found = true; tag_sz = TAG_SIZE_ID0;
+                        axis_color = Scalar(0, 255, 0); tag_label = "ID0 (15cm)";
+                    } else if (ids[i] == BASE_TAG_ID_1) {
+                        id1_found = true; tag_sz = TAG_SIZE_ID1;
+                        axis_color = Scalar(255, 0, 255); tag_label = "ID1 (15cm)";
+                    } else if (ids[i] == TARGET_TAG_ID) {
+                        id2_found = true; tag_sz = TAG_SIZE_ID2;
+                        axis_color = Scalar(0, 0, 255); tag_label = "ID2 (6cm)";
+                    } else { continue; }
+
+                    // Per-tag PnP with correct size
+                    double h = tag_sz / 2;
+                    vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
+                    solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
+                    if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
+                    else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
+                    else { id2_rvec = rv; id2_tvec = tv; }
+
+                    aruco::drawAxis(frame, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
                     
                     putText(frame, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
                            FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
