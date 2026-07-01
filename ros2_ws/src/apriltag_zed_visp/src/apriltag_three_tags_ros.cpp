@@ -317,20 +317,84 @@ int main(int argc, char** argv) {
     cout << "ZED 相机打开成功!" << endl;
 
     auto zed_params = zed.getCameraInformation().camera_configuration.calibration_parameters.left_cam;
-    double fx = zed_params.fx;
-    double fy = zed_params.fy;
-    double cx = zed_params.cx;
-    double cy = zed_params.cy;
+    cout << "ZED 出厂内参: fx=" << zed_params.fx << " fy=" << zed_params.fy
+         << " cx=" << zed_params.cx << " cy=" << zed_params.cy << endl;
 
-    Mat camera_matrix = (Mat_<double>(3, 3) <<
-        fx, 0, cx,
-        0, fy, cy,
-        0, 0, 1);
+    // Try to load calibrated intrinsics
+    string calib_file = "/home/nkk/coordate_change/ros2_ws/src/apriltag_zed_visp/config/zed_calibration.yaml";
+    bool use_calib = false;
+    double fx, fy, cx, cy;
+    Mat dist_coeffs_full;
 
-    Mat dist_coeffs = (Mat_<double>(5, 1) <<
+    ifstream cf(calib_file);
+    if (cf.is_open()) {
+        // Simple YAML parser (same as apriltag_detector)
+        string line;
+        vector<double> K(9), D;
+        while (getline(cf, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            if (line.find("camera_matrix:") != string::npos) {
+                getline(cf, line); getline(cf, line); getline(cf, line);
+                size_t s = line.find('['), e = line.find(']');
+                if (s != string::npos && e != string::npos) {
+                    stringstream ss(line.substr(s+1, e-s-1));
+                    string v; int i = 0;
+                    while (getline(ss, v, ',') && i < 9) {
+                        v.erase(0, v.find_first_not_of(" \t"));
+                        K[i++] = stod(v);
+                    }
+                }
+            }
+            else if (line.find("distortion_coefficients:") != string::npos) {
+                getline(cf, line); getline(cf, line); getline(cf, line);
+                size_t s = line.find('['), e = line.find(']');
+                if (s != string::npos && e != string::npos) {
+                    stringstream ss(line.substr(s+1, e-s-1));
+                    string v;
+                    while (getline(ss, v, ',')) {
+                        v.erase(0, v.find_first_not_of(" \t"));
+                        if (!v.empty()) D.push_back(stod(v));
+                    }
+                }
+            }
+        }
+        cf.close();
+        if (K[0] > 0) {
+            fx = K[0]; fy = K[4]; cx = K[2]; cy = K[5];
+            use_calib = true;
+            cout << "✅ 标定内参已加载: fx=" << fx << " fy=" << fy
+                 << " cx=" << cx << " cy=" << cy << endl;
+            dist_coeffs_full = Mat(static_cast<int>(D.size()), 1, CV_64F);
+            for (size_t i = 0; i < D.size(); ++i) dist_coeffs_full.at<double>(static_cast<int>(i)) = D[i];
+        }
+    }
+    if (!use_calib) {
+        fx = zed_params.fx; fy = zed_params.fy;
+        cx = zed_params.cx; cy = zed_params.cy;
+        cout << "⚠️ 未找到标定文件，使用 ZED 出厂内参" << endl;
+    }
+
+    Mat camera_matrix = (Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
+
+    // Build ZED factory dist_coeffs (used only for remap)
+    Mat zed_dist_coeffs = (Mat_<double>(5, 1) <<
         zed_params.disto[0], zed_params.disto[1],
         zed_params.disto[2], zed_params.disto[3],
         zed_params.disto[4]);
+
+    // Pre-compute undistortion map (always use ZED factory distortion since we need to rectify the raw image)
+    auto cam_info = zed.getCameraInformation().camera_configuration.resolution;
+    int img_w = static_cast<int>(cam_info.width);
+    int img_h = static_cast<int>(cam_info.height);
+    Mat undist_map_x, undist_map_y;
+    cv::initUndistortRectifyMap(camera_matrix, zed_dist_coeffs, Mat(), camera_matrix,
+                                Size(img_w, img_h),
+                                CV_16SC2, undist_map_x, undist_map_y);
+
+    // PnP uses ZERO distortion (image already remapped)
+    Mat dist_coeffs = Mat::zeros(5, 1, CV_64F);
+    cout << "✅ 去畸变映射已计算 → PnP 使用零畸变模型" << endl;
+    cout << "✅ 使用内参: " << (use_calib ? "标定" : "ZED出厂") << endl;
 
     Ptr<aruco::Dictionary> dictionary = 
         aruco::getPredefinedDictionary(aruco::DICT_APRILTAG_36h11);
@@ -360,6 +424,9 @@ int main(int argc, char** argv) {
             
             Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
             cvtColor(cv_img, frame, COLOR_BGRA2BGR);
+
+            // Undistort: remap to eliminate lens distortion (detection on rectified image)
+            cv::remap(frame, frame, undist_map_x, undist_map_y, cv::INTER_LINEAR);
 
             vector<int> ids;
             vector<vector<Point2f>> corners;
