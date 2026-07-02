@@ -450,7 +450,7 @@ int main(int argc, char** argv) {
          << " cx=" << zed_params.cx << " cy=" << zed_params.cy << endl;
 
     // Try to load calibrated intrinsics
-    string calib_file = "";
+    string calib_file = "/home/nkk/coordate_change/ros2_ws/src/apriltag_zed_visp/config/zed_calibration.yaml";
     bool use_calib = false;
     double fx, fy, cx, cy;
     Mat dist_coeffs_full;
