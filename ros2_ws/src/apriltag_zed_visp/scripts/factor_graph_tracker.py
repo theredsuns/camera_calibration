@@ -122,7 +122,7 @@ def main():
     zed = sl.Camera()
     init = sl.InitParameters()
     init.camera_resolution = sl.RESOLUTION.HD720
-    init.depth_mode = sl.DEPTH_MODE.PERFORMANCE
+    init.depth_mode = sl.DEPTH_MODE.NEURAL
     init.camera_fps = 30
     if zed.open(init) != sl.ERROR_CODE.SUCCESS:
         print("ZED open failed"); return
@@ -150,7 +150,7 @@ def main():
     while True:
         if zed.grab() != sl.ERROR_CODE.SUCCESS:
             continue
-        zed.retrieveImage(zed_img, sl.VIEW.LEFT)
+        zed.retrieve_image(zed_img, sl.VIEW.LEFT)
         frame = zed_img.get_data()
         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
         frame = cv2.remap(frame, map_x, map_y, cv2.INTER_LINEAR)
