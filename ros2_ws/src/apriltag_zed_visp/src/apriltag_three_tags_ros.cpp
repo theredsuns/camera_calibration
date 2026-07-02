@@ -568,7 +568,7 @@ int main(int argc, char** argv) {
             zed.retrieveImage(zed_img, sl::VIEW::LEFT);
             sl::Mat depth_map;
             zed.retrieveMeasure(depth_map, sl::MEASURE::DEPTH);
-            Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<sl::uchar1>());
+            Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<float>());
             Mat depth_undist;
             cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_LINEAR);
 
