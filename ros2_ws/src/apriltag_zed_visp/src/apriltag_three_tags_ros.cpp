@@ -911,7 +911,7 @@ int main(int argc, char** argv) {
 
                     stringstream ss;
                     ss << fixed << setprecision(1);
-                    ss << "ID2->ID0: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
+                    ss << "L: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
                        << (assembly_moving ? " [MOV]" : "");
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
@@ -937,6 +937,22 @@ int main(int argc, char** argv) {
                     } else {
                         putText(frame, "ID1: not in view", Point(20, 75),
                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
+                    }
+
+                    // Right camera relative pose comparison
+                    if (id0_r && id2_r) {
+                        Mat R0r = rvecToMatrix(id0_rvec_r);
+                        Mat t_rel_r = R0r.t() * Mat(Vec3d(id2_tvec_r[0]-id0_tvec_r[0],
+                                                          id2_tvec_r[1]-id0_tvec_r[1],
+                                                          id2_tvec_r[2]-id0_tvec_r[2]));
+                        double rdist = norm(t_rel_r);
+                        stringstream sr;
+                        sr << fixed << setprecision(1);
+                        sr << "R眼:" << rdist*1000 << "mm X=" << t_rel_r.at<double>(0)*1000
+                           << " Y=" << t_rel_r.at<double>(1)*1000
+                           << " Z=" << t_rel_r.at<double>(2)*1000;
+                        putText(frame, sr.str(), Point(20, 105),
+                               FONT_HERSHEY_SIMPLEX, 0.45, Scalar(200, 200, 100), 1);
                     }
                 }
             }
