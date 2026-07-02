@@ -208,13 +208,13 @@ public:
             return;
         }
 
-        double raw_z = getWeightedMean(history_z);
-        double raw_x = getWeightedMean(history_x);
-        double raw_y = getWeightedMean(history_y);
-        double raw_rx = getWeightedMean(history_rx);
-        double raw_ry = getWeightedMean(history_ry);
-        double raw_rz = getWeightedMean(history_rz);
-        double raw_dist = getWeightedMean(history);
+        double raw_z = getTrimmedMean(history_z);
+        double raw_x = getTrimmedMean(history_x);
+        double raw_y = getTrimmedMean(history_y);
+        double raw_rx = getTrimmedMean(history_rx);
+        double raw_ry = getTrimmedMean(history_ry);
+        double raw_rz = getTrimmedMean(history_rz);
+        double raw_dist = getTrimmedMean(history);
 
         z = kf_z.filter(raw_z);
         x = kf_x.filter(raw_x);
