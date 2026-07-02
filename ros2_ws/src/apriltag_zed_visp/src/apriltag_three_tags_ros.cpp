@@ -697,7 +697,7 @@ int main(int argc, char** argv) {
                         smooth_z_baseline = t_rel.at<double>(2,0);
                         z_init = true;
                     } else {
-                        smooth_z_baseline = 0.7 * smooth_z_baseline + 0.3 * t_rel.at<double>(2,0);
+                        smooth_z_baseline = 0.92 * smooth_z_baseline + 0.08 * t_rel.at<double>(2,0);
                     }
 
                     relative_filter.add(
