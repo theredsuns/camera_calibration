@@ -23,8 +23,8 @@ using namespace std;
 using namespace cv;
 using namespace std::chrono_literals;
 
-const double TAG_SIZE_ID0 = 0.15;  // 15cm
-const double TAG_SIZE_ID1 = 0.15;  // 15cm
+const double TAG_SIZE_ID0 = 0.06;  // 6cm
+const double TAG_SIZE_ID1 = 0.06;  // 6cm
 const double TAG_SIZE_ID2 = 0.06;  // 6cm
 const int BASE_TAG_ID_0 = 0;
 const int BASE_TAG_ID_1 = 1;
@@ -40,6 +40,37 @@ const double ID0_TO_ID1_Z = 0.000;
 string g_intrinsics_source = "???";
 string g_intrinsics_values = "";
 string g_distortion_info = "";
+
+class KalmanFilter1D {
+private:
+    double x_est;
+    double p_est;
+    double q;
+    double r;
+    bool initialized;
+
+public:
+    KalmanFilter1D(double process_noise = 0.001, double measurement_noise = 0.01)
+        : q(process_noise), r(measurement_noise), initialized(false) {}
+
+    double filter(double measurement) {
+        if (!initialized) {
+            x_est = measurement;
+            p_est = 1.0;
+            initialized = true;
+            return x_est;
+        }
+
+        double x_pred = x_est;
+        double p_pred = p_est + q;
+
+        double k = p_pred / (p_pred + r);
+        x_est = x_pred + k * (measurement - x_pred);
+        p_est = (1 - k) * p_pred;
+
+        return x_est;
+    }
+};
 
 class AdvancedFilter {
 private:
@@ -57,10 +88,20 @@ private:
     double last_rx, last_ry, last_rz;
     bool initialized;
     mutex mtx;
+    KalmanFilter1D kf_x;
+    KalmanFilter1D kf_y;
+    KalmanFilter1D kf_z;
+    KalmanFilter1D kf_rx;
+    KalmanFilter1D kf_ry;
+    KalmanFilter1D kf_rz;
+    KalmanFilter1D kf_dist;
 
 public:
-    AdvancedFilter(int size = 60, double smooth_factor = 0.1) 
-        : max_size(size), alpha(smooth_factor), initialized(false) {
+    AdvancedFilter(int size = 30, double smooth_factor = 0.3) 
+        : max_size(size), alpha(smooth_factor), initialized(false),
+          kf_x(0.001, 0.005), kf_y(0.001, 0.005), kf_z(0.001, 0.005),
+          kf_rx(0.001, 0.01), kf_ry(0.001, 0.01), kf_rz(0.001, 0.01),
+          kf_dist(0.001, 0.005) {
         last_filtered = last_x = last_y = last_z = 0;
         last_rx = last_ry = last_rz = 0;
     }
@@ -80,13 +121,19 @@ public:
             history_rx.push_back(rx);
             history_ry.push_back(ry);
             history_rz.push_back(rz);
+            kf_x.filter(x);
+            kf_y.filter(y);
+            kf_z.filter(z);
+            kf_rx.filter(rx);
+            kf_ry.filter(ry);
+            kf_rz.filter(rz);
+            kf_dist.filter(distance);
             return;
         }
 
-        // Outlier rejection: skip only if jump is unrealistically large (PnP failure)
         double jump_dist = sqrt(pow(x - last_x, 2) + pow(y - last_y, 2) + pow(z - last_z, 2)) * 1000.0;
         double jump_rot = sqrt(pow(rx - last_rx, 2) + pow(ry - last_ry, 2) + pow(rz - last_rz, 2)) * 180.0 / M_PI;
-        if (jump_dist > 30.0 || jump_rot > 10.0) return; // absolute threshold: >30mm or >10° = PnP failure
+        if (jump_dist > 20.0 || jump_rot > 8.0) return;
 
         history.push_back(distance);
         history_x.push_back(x);
@@ -117,7 +164,7 @@ public:
         return sqrt(var / (data.size() - 1));
     }
 
-    double getTrimmedMean(const deque<double>& data, double trim_percent = 0.25) {
+    double getTrimmedMean(const deque<double>& data, double trim_percent = 0.3) {
         if (data.empty()) return 0;
         deque<double> sorted = data;
         sort(sorted.begin(), sorted.end());
@@ -139,6 +186,19 @@ public:
         return a * new_val + (1 - a) * last_val;
     }
 
+    double getWeightedMean(const deque<double>& data) {
+        if (data.empty()) return 0;
+        double sum = 0;
+        double weight_sum = 0;
+        int n = data.size();
+        for (int i = 0; i < n; i++) {
+            double w = (i + 1) * (i + 1);
+            sum += data[i] * w;
+            weight_sum += w;
+        }
+        return sum / weight_sum;
+    }
+
     void getSmoothed(double& x, double& y, double& z, 
                     double& rx, double& ry, double& rz, double& distance) {
         lock_guard<mutex> lock(mtx);
@@ -148,22 +208,37 @@ public:
             return;
         }
 
-        distance = lowPass(getTrimmedMean(history, 0.25), last_filtered, alpha);
-        last_filtered = distance;
+        double raw_z = getWeightedMean(history_z);
+        double raw_x = getWeightedMean(history_x);
+        double raw_y = getWeightedMean(history_y);
+        double raw_rx = getWeightedMean(history_rx);
+        double raw_ry = getWeightedMean(history_ry);
+        double raw_rz = getWeightedMean(history_rz);
+        double raw_dist = getWeightedMean(history);
 
-        x = lowPass(getTrimmedMean(history_x, 0.25), last_x, alpha);
+        z = kf_z.filter(raw_z);
+        x = kf_x.filter(raw_x);
+        y = kf_y.filter(raw_y);
+        rx = kf_rx.filter(raw_rx);
+        ry = kf_ry.filter(raw_ry);
+        rz = kf_rz.filter(raw_rz);
+        distance = kf_dist.filter(raw_dist);
+
+        z = lowPass(z, last_z, alpha);
+        x = lowPass(x, last_x, alpha);
+        y = lowPass(y, last_y, alpha);
+        rx = lowPass(rx, last_rx, alpha);
+        ry = lowPass(ry, last_ry, alpha);
+        rz = lowPass(rz, last_rz, alpha);
+        distance = lowPass(distance, last_filtered, alpha);
+
         last_x = x;
-        y = lowPass(getTrimmedMean(history_y, 0.25), last_y, alpha);
         last_y = y;
-        z = lowPass(getTrimmedMean(history_z, 0.25), last_z, alpha);
         last_z = z;
-
-        rx = lowPass(getTrimmedMean(history_rx, 0.25), last_rx, alpha);
         last_rx = rx;
-        ry = lowPass(getTrimmedMean(history_ry, 0.25), last_ry, alpha);
         last_ry = ry;
-        rz = lowPass(getTrimmedMean(history_rz, 0.25), last_rz, alpha);
         last_rz = rz;
+        last_filtered = distance;
     }
 
     void clear() {
@@ -491,7 +566,6 @@ int main(int argc, char** argv) {
     while (rclcpp::ok()) {
         if (zed.grab() == sl::ERROR_CODE::SUCCESS) {
             zed.retrieveImage(zed_img, sl::VIEW::LEFT);
-            // Retrieve depth map for Z stabilization (raw coordinates)
             sl::Mat depth_map;
             zed.retrieveMeasure(depth_map, sl::MEASURE::DEPTH);
             Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<sl::uchar1>());
@@ -501,7 +575,7 @@ int main(int argc, char** argv) {
             Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
             cvtColor(cv_img, frame, COLOR_BGRA2BGR);
 
-            // Undistort: remap to eliminate lens distortion (detection on rectified image)
+            // Undistort: remap to eliminate lens distortion
             cv::remap(frame, frame, undist_map_x, undist_map_y, cv::INTER_LINEAR);
 
             vector<int> ids;
@@ -535,16 +609,14 @@ int main(int argc, char** argv) {
                     vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
                     solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
 
-                    // ZED depth fusion: sample depth at tag center, blend with PnP Z
-                    Point2f center(0,0);
-                    for (auto& c : corners[i]) center += c;
-                    center *= 0.25f;
-                    if (center.x >= 0 && center.x < depth_undist.cols &&
-                        center.y >= 0 && center.y < depth_undist.rows) {
-                        float d = depth_undist.at<float>((int)center.y, (int)center.x);
-                        if (d > 0 && std::isfinite(d) && std::abs(d - tv[2]) < 0.2) {
-                            tv[2] = tv[2] * 0.3 + d * 0.7;  // 70% depth, 30% PnP
-                        }
+                    // Fuse with ZED depth (more stable than PnP Z for 6cm tags)
+                    Point2f ctr(0,0);
+                    for (auto& p : corners[i]) ctr += p;
+                    ctr *= 0.25f;
+                    if (ctr.x>0 && ctr.x<depth_undist.cols && ctr.y>0 && ctr.y<depth_undist.rows) {
+                        float d = depth_undist.at<float>((int)ctr.y, (int)ctr.x);
+                        if (d > 0.1 && std::isfinite(d) && std::abs(d - tv[2]) < 0.3)
+                            tv[2] = tv[2] * 0.2 + d * 0.8;
                     }
 
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
@@ -560,8 +632,8 @@ int main(int argc, char** argv) {
                 if (id0_found && id2_found) {
                     frame_count++;
 
-                    // Scale correction using known ID0→ID1 distance as reference ruler
                     double scale_factor = 1.0;
+                    bool has_scale = false;
                     if (id1_found) {
                         double measured_d01 = norm(id1_tvec - id0_tvec);
                         double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
@@ -569,47 +641,72 @@ int main(int argc, char** argv) {
                                                 ID0_TO_ID1_Z*ID0_TO_ID1_Z);
                         if (measured_d01 > 0.01 && known_d01 > 0) {
                             scale_factor = known_d01 / measured_d01;
-                            if (scale_factor < 0.95 || scale_factor > 1.05) scale_factor = 1.0;
+                            if (scale_factor > 0.8 && scale_factor < 1.2) {
+                                has_scale = true;
+                            } else {
+                                scale_factor = 1.0;
+                            }
                         }
                     }
 
-                    // EMA-filter ID0 rotation (orientation changes slowly, PnP noise is fast)
                     static Vec3d id0_rvec_filt(0,0,0);
                     static bool id0_rvec_init = false;
                     if (!id0_rvec_init) { id0_rvec_filt = id0_rvec; id0_rvec_init = true; }
-                    id0_rvec_filt = 0.15 * id0_rvec + 0.85 * id0_rvec_filt;
+                    id0_rvec_filt = 0.08 * id0_rvec + 0.92 * id0_rvec_filt;
                     Mat R_id0 = rvecToMatrix(id0_rvec_filt);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
 
                     Mat R_rel = R_id0.t() * R_id2;
-                    Mat t_rel_raw = R_id0.t() * (Mat(id2_tvec) - Mat(id0_tvec));
 
+                    Vec3d t_rel_raw_vec(id0_tvec[0] - id0_tvec[0], id0_tvec[1] - id0_tvec[1], id0_tvec[2] - id0_tvec[2]);
+                    t_rel_raw_vec[0] = id2_tvec[0] - id0_tvec[0];
+                    t_rel_raw_vec[1] = id2_tvec[1] - id0_tvec[1];
+                    t_rel_raw_vec[2] = id2_tvec[2] - id0_tvec[2];
 
-                    // Apply scale correction
-                    Mat t_rel = scale_factor * t_rel_raw;
+                    Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
+
+                    Mat t_rel;
+                    if (has_scale) {
+                        t_rel = scale_factor * t_rel_raw;
+                    } else {
+                        t_rel = t_rel_raw.clone();
+                    }
 
                     Vec3d rel_rvec = matrixToRvec(R_rel);
                     double rel_distance = norm(t_rel);
 
-                    // Adaptive: distinguish camera motion (both tags move together)
-                    // from assembly motion (only ID2 moves relative to ID0)
-                    // Strategy: always update filter, but use outlier rejection
-                    // to skip frames corrupted by motion blur
+                    static Vec3d prev_t_rel(0,0,0);
+                    static bool prev_init = false;
+                    double delta_t = 0;
+                    if (prev_init) {
+                        delta_t = norm(t_rel - Mat(prev_t_rel)) * 1000.0; // mm
+                    }
+                    prev_t_rel = Vec3d(t_rel.at<double>(0,0), t_rel.at<double>(1,0), t_rel.at<double>(2,0));
+                    prev_init = true;
+
+                    static double stability_score = 1.0;
+                    if (delta_t < 5.0) {
+                        stability_score = 0.95 * stability_score + 0.05 * 1.0;
+                    } else {
+                        stability_score = 0.95 * stability_score + 0.05 * 0.0;
+                    }
+
+                    static double smooth_z_baseline = 0;
+                    static bool z_init = false;
+                    if (!z_init) {
+                        smooth_z_baseline = t_rel.at<double>(2,0);
+                        z_init = true;
+                    } else {
+                        smooth_z_baseline = 0.7 * smooth_z_baseline + 0.3 * t_rel.at<double>(2,0);
+                    }
+
                     relative_filter.add(
-                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
+                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), smooth_z_baseline,
                         rel_rvec[0], rel_rvec[1], rel_rvec[2],
                         rel_distance
                     );
 
-                    // Track assembly velocity from raw relative pose
-                    Vec3d cur_raw_rel_t(t_rel.at<double>(0,0), t_rel.at<double>(1,0), t_rel.at<double>(2,0));
-                    double assembly_speed = 0.0;
-                    if (prev_raw_valid) {
-                        assembly_speed = norm(cur_raw_rel_t - prev_raw_rel_t) * 1000.0; // mm/frame
-                    }
-                    prev_raw_rel_t = cur_raw_rel_t;
-                    prev_raw_valid = true;
-                    bool assembly_moving = (assembly_speed > 1.0); // >1mm/frame = ID2 moving
+                    bool assembly_moving = (delta_t > 5.0);
 
                     double smooth_x, smooth_y, smooth_z;
                     double smooth_rx, smooth_ry, smooth_rz, smooth_dist;
