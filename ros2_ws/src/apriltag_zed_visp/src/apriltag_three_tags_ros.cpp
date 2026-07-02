@@ -600,6 +600,7 @@ int main(int argc, char** argv) {
 
             // Undistort: remap to eliminate lens distortion
             cv::remap(frame, frame, undist_map_x, undist_map_y, cv::INTER_LINEAR);
+                Mat frame_left = frame.clone();  // saved for display
 
             vector<int> ids;
             vector<vector<Point2f>> corners;
@@ -921,21 +922,21 @@ int main(int argc, char** argv) {
                     ss2 << "X=" << corr_x*1000
                         << " Y=" << corr_y*1000
                         << " Z=" << corr_z*1000 << " mm";
-                    putText(frame, ss2.str(), Point(20, 55), 
+                    putText(frame_left, ss2.str(), Point(20, 55), 
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
                     if (id1_found) {
                         stringstream ss3;
                         ss3 << fixed << setprecision(1);
                         ss3 << "ID1->ID0: " << r1d * 1000 << "mm (ref " << ID0_TO_ID1_X*1000 << "mm)";
-                        putText(frame, ss3.str(), Point(20, 75),
+                        putText(frame_left, ss3.str(), Point(20, 75),
                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(200, 200, 200), 1);
                         stringstream ss4;
                         ss4 << "  X=" << r1x*1000 << " Y=" << r1y*1000 << " Z=" << r1z*1000 << " mm";
                         putText(frame, ss4.str(), Point(20, 93),
                                FONT_HERSHEY_SIMPLEX, 0.4, Scalar(200, 200, 200), 1);
                     } else {
-                        putText(frame, "ID1: not in view", Point(20, 75),
+                        putText(frame_left, "ID1: not in view", Point(20, 75),
                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
                     }
 
@@ -951,21 +952,21 @@ int main(int argc, char** argv) {
                         sr << "R眼:" << rdist*1000 << "mm X=" << t_rel_r.at<double>(0)*1000
                            << " Y=" << t_rel_r.at<double>(1)*1000
                            << " Z=" << t_rel_r.at<double>(2)*1000;
-                        putText(frame, sr.str(), Point(20, 105),
+                        putText(frame_left, sr.str(), Point(20, 105),
                                FONT_HERSHEY_SIMPLEX, 0.45, Scalar(200, 200, 100), 1);
                     }
                 }
             }
 
             if (!id0_found || !id2_found) {
-                putText(frame, "请将 ID0(绿) 和 ID2(红) 标签放入视野", Point(20, frame.rows - 30), 
+                putText(frame_left, "请将 ID0(绿) 和 ID2(红) 标签放入视野", Point(20, frame.rows - 30), 
                        FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 0, 255), 2);
             }
 
-            putText(frame, "ID0(绿)=基准 | ID1(紫)=辅助 | ID2(红)=目标", 
+            putText(frame_left, "ID0(绿)=基准 | ID1(紫)=辅助 | ID2(红)=目标", 
                    Point(20, frame.rows - 60), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(200, 200, 200), 1);
 
-            imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame);
+            imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
         }
 
         rclcpp::spin_some(node);
