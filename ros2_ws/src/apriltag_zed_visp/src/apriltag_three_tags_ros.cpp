@@ -887,7 +887,7 @@ int main(int argc, char** argv) {
                         corr_z -= (raw1_z - r1z);
                     }
 
-                    if (frame_count % 2 == 0) {
+                    if (true) {
                         printSystemInfo(id0_found, id1_found, id2_found,
                                        id0_tvec[0], id0_tvec[1], id0_tvec[2],
                                        id1_found ? id1_tvec[0] : 0,
