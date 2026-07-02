@@ -609,14 +609,20 @@ int main(int argc, char** argv) {
                     vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
                     solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
 
-                    // Fuse with ZED depth (more stable than PnP Z for 6cm tags)
-                    Point2f ctr(0,0);
-                    for (auto& p : corners[i]) ctr += p;
-                    ctr *= 0.25f;
-                    if (ctr.x>0 && ctr.x<depth_undist.cols && ctr.y>0 && ctr.y<depth_undist.rows) {
-                        float d = depth_undist.at<float>((int)ctr.y, (int)ctr.x);
-                        if (d > 0.1 && std::isfinite(d) && std::abs(d - tv[2]) < 0.3)
-                            tv[2] = tv[2] * 0.2 + d * 0.8;
+                    // ZED depth at tag CORNERS (high contrast → reliable stereo match)
+                    // Center has no texture → depth is invalid there
+                    float depth_sum = 0; int depth_n = 0;
+                    for (auto& p : corners[i]) {
+                        int px=(int)p.x, py=(int)p.y;
+                        if (px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
+                            float d = depth_undist.at<float>(py, px);
+                            if (d > 0.1 && std::isfinite(d)) { depth_sum += d; depth_n++; }
+                        }
+                    }
+                    if (depth_n >= 3) {
+                        float d_med = depth_sum / depth_n;
+                        if (std::abs(d_med - tv[2]) < 0.3)
+                            tv[2] = tv[2] * 0.3 + d_med * 0.7;
                     }
 
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
