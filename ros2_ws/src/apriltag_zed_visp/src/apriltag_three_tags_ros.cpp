@@ -7,6 +7,7 @@
 #include <memory>
 #include <chrono>
 #include <mutex>
+#include <cstdio>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/aruco.hpp>
@@ -715,6 +716,11 @@ int main(int argc, char** argv) {
 
                     Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
+                    // Average ID0+ID1 rotation (same physical orientation → noise cancels)
+                    if (id1_found) {
+                        Vec3d rv_avg = (id0_rvec + id1_rvec) * 0.5;
+                        R_id0 = rvecToMatrix(rv_avg);  // use averaged rotation as reference
+                    }
 
                     Mat R_rel = R_id0.t() * R_id2;
 
@@ -777,6 +783,18 @@ int main(int argc, char** argv) {
                     } else {
                         t_rel = t_rel_raw.clone();
                     }
+
+                    // ===== DEBUG: output CSV to stderr =====
+                    {
+                        g_dbg_frame++;
+                        double relz_raw = t_rel_raw.at<double>(2,0);
+                        double relz_final = t_rel.at<double>(2,0);
+                        double sf = has_scale ? scale_factor : 1.0;
+                        fprintf(stderr, "DBGZ,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
+                                g_dbg_frame, g_dbg_pnpz0, g_dbg_zedz0, g_dbg_pnpz2, g_dbg_zedz2,
+                                relz_raw, sf, relz_final);
+                    }
+                    // ===== END DEBUG =====
 
                     Vec3d rel_rvec = matrixToRvec(R_rel);
                     double rel_distance = norm(t_rel);
@@ -850,7 +868,6 @@ int main(int argc, char** argv) {
                     // Subtract the camera-induced shift from ID2→ID0
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
-                    // Camera-motion compensation: ID1->ID0 as real-time baseline
                     if (id1_found && id1_filter.isStable()) {
                         Mat R_id0_m = rvecToMatrix(id0_rvec);
                         Mat t1_raw = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
