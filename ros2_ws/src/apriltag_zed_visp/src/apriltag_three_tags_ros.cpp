@@ -655,11 +655,7 @@ int main(int argc, char** argv) {
                         }
                     }
 
-                    static Vec3d id0_rvec_filt(0,0,0);
-                    static bool id0_rvec_init = false;
-                    if (!id0_rvec_init) { id0_rvec_filt = id0_rvec; id0_rvec_init = true; }
-                    id0_rvec_filt = 0.08 * id0_rvec + 0.92 * id0_rvec_filt;
-                    Mat R_id0 = rvecToMatrix(id0_rvec_filt);
+                    Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
 
                     Mat R_rel = R_id0.t() * R_id2;
