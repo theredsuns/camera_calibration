@@ -612,16 +612,17 @@ int main(int argc, char** argv) {
                 aruco::drawDetectedMarkers(frame, corners, ids, Scalar(0, 255, 0));
 
 
+                vector<Point2f> c0, c1;
                 for (size_t i = 0; i < ids.size(); i++) {
                     Scalar axis_color; string tag_label; double tag_sz;
                     Vec3d rv, tv;
 
                     if (ids[i] == BASE_TAG_ID_0) {
-                        id0_found = true; tag_sz = TAG_SIZE_ID0;
-                        axis_color = Scalar(0, 255, 0); tag_label = "ID0 (15cm)";
+                        id0_found = true; tag_sz = TAG_SIZE_ID0; c0 = corners[i];
+                        axis_color = Scalar(0, 255, 0); tag_label = "ID0";
                     } else if (ids[i] == BASE_TAG_ID_1) {
-                        id1_found = true; tag_sz = TAG_SIZE_ID1;
-                        axis_color = Scalar(255, 0, 255); tag_label = "ID1 (15cm)";
+                        id1_found = true; tag_sz = TAG_SIZE_ID1; c1 = corners[i];
+                        axis_color = Scalar(255, 0, 255); tag_label = "ID1";
                     } else if (ids[i] == TARGET_TAG_ID) {
                         id2_found = true; tag_sz = TAG_SIZE_ID2;
                         axis_color = Scalar(0, 0, 255); tag_label = "ID2 (6cm)";
