@@ -32,6 +32,11 @@ const int TARGET_TAG_ID = 2;
 const int ROS_DOMAIN_ID = 36;
 const string TOPIC_NAME = "Trace5_zed_relative";
 
+// ===== DEBUG: Z-axis jitter (debug-zed-z-jitter) =====
+double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
+int g_dbg_frame = 0;
+// ===== END DEBUG =====
+
 const double ID0_TO_ID1_X = 0.1587;
 const double ID0_TO_ID1_Y = 0.000;
 const double ID0_TO_ID1_Z = 0.000;
@@ -626,6 +631,14 @@ int main(int argc, char** argv) {
                     vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
                     solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
 
+                    // ===== DEBUG: record raw PnP Z =====
+                    {
+                        double _pnpz = tv[2];
+                        if (ids[i] == BASE_TAG_ID_0) g_dbg_pnpz0 = _pnpz;
+                        else if (ids[i] == TARGET_TAG_ID) g_dbg_pnpz2 = _pnpz;
+                    }
+                    // ===== END DEBUG =====
+
                     // ZED depth at tag CORNERS (high contrast → reliable stereo match)
                     // Center has no texture → depth is invalid there
                     float depth_sum = 0; int depth_n = 0;
@@ -638,6 +651,10 @@ int main(int argc, char** argv) {
                     }
                     if (depth_n >= 3) {
                         float d_med = depth_sum / depth_n;
+                        // ===== DEBUG: record ZED depth Z =====
+                        if (ids[i] == BASE_TAG_ID_0) g_dbg_zedz0 = d_med;
+                        else if (ids[i] == TARGET_TAG_ID) g_dbg_zedz2 = d_med;
+                        // ===== END DEBUG =====
                         if (std::abs(d_med - tv[2]) < 0.3)
                             tv[2] = tv[2] * 0.3 + d_med * 0.7;
                     }
@@ -828,10 +845,31 @@ int main(int argc, char** argv) {
                         r1d = sqrt(r1x*r1x + r1y*r1y + r1z*r1z);
                     }
 
-                    // Already corrected pre-filter via raw ID1→ID0 rotation
+                    // Camera-motion compensation: use ID1→ID0 as baseline reference
+                    // When camera moves, ID1→ID0 raw measurement shifts → same shift in ID2→ID0
+                    // Subtract the camera-induced shift from ID2→ID0
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
-                    if (frame_count % 6 == 0) { double rz = t_rel.at<double>(2,0)*1000; fprintf(stderr, "RAW_Z=%.1fmm FILT_Z=%.1fmm\n", rz, corr_z*1000); }
+                    // Camera-motion compensation: ID1->ID0 as real-time baseline
+                    if (id1_found && id1_filter.isStable()) {
+                        Mat R_id0_m = rvecToMatrix(id0_rvec);
+                        Mat t1_raw = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
+                        corr_x -= (t1_raw.at<double>(0) - r1x);
+                        corr_y -= (t1_raw.at<double>(1) - r1y);
+                        corr_z -= (t1_raw.at<double>(2) - r1z);
+                    }
+                    if (id1_found && id1_filter.isStable()) {
+                        // Current raw ID1→ID0 (from this frame)
+                        double raw1_x = id1_tvec[0] - id0_tvec[0];  // in camera frame
+                        double raw1_y = id1_tvec[1] - id0_tvec[1];
+                        double raw1_z = id1_tvec[2] - id0_tvec[2];
+                        // Camera-induced shift = raw - filtered (filtered is the "truth")
+                        // Apply inverse shift to ID2→ID0 smoothed values
+                        corr_x -= (raw1_x - r1x);
+                        corr_y -= (raw1_y - r1y);
+                        corr_z -= (raw1_z - r1z);
+                    }
+                    if (frame_count % 6 == 0) { double rz = t_rel.at<double>(2,0)*1000; fprintf(stderr, "RAW_Z=%.1fmm FILT_Z=%.1fmm CORR_Z=%.1fmm\n", rz, corr_z*1000); }
 
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
