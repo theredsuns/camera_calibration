@@ -660,12 +660,28 @@ int main(int argc, char** argv) {
 
                     Mat R_rel = R_id0.t() * R_id2;
 
-                    Vec3d t_rel_raw_vec(id0_tvec[0] - id0_tvec[0], id0_tvec[1] - id0_tvec[1], id0_tvec[2] - id0_tvec[2]);
-                    t_rel_raw_vec[0] = id2_tvec[0] - id0_tvec[0];
-                    t_rel_raw_vec[1] = id2_tvec[1] - id0_tvec[1];
-                    t_rel_raw_vec[2] = id2_tvec[2] - id0_tvec[2];
+                    Vec3d t_rel_raw_vec(id2_tvec[0] - id0_tvec[0],
+                                        id2_tvec[1] - id0_tvec[1],
+                                        id2_tvec[2] - id0_tvec[2]);
 
                     Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
+
+                    // Dual-path: also compute via ID1, average to halve noise
+                    if (id1_found) {
+                        Mat R_id1 = rvecToMatrix(id1_rvec);
+                        Mat R_rel2 = R_id1.t() * R_id2;
+                        Vec3d r1 = matrixToRvec(R_rel);
+                        Vec3d r2 = matrixToRvec(R_rel2);
+                        R_rel = rvecToMatrix((r1 + r2) * 0.5);  // average rotation
+
+                        Mat t2 = R_id1.t() * Mat(Vec3d(id2_tvec[0]-id1_tvec[0],
+                                                       id2_tvec[1]-id1_tvec[1],
+                                                       id2_tvec[2]-id1_tvec[2]));
+                        t2.at<double>(0) += ID0_TO_ID1_X;
+                        t2.at<double>(1) += ID0_TO_ID1_Y;
+                        t2.at<double>(2) += ID0_TO_ID1_Z;
+                        t_rel_raw = (t_rel_raw + t2) * 0.5;  // average translation
+                    }
 
                     Mat t_rel;
                     if (has_scale) {
