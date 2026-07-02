@@ -359,7 +359,7 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
                     double rel1_x, double rel1_y, double rel1_z,
                     double rel1_rx, double rel1_ry, double rel1_rz,
                     double rel1_dist) {
-    // system("clear");
+    system("clear");
     
     cout << "==================================================" << endl;
     cout << "   三标签基准系统 (ID0+ID1 -> ID2)              " << endl;
