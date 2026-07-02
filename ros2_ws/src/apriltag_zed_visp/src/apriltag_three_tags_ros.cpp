@@ -832,6 +832,13 @@ int main(int argc, char** argv) {
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
 
+                    if (frame_count % 6 == 0) {
+                        double raw_z_now = t_rel.at<double>(2,0) * 1000;
+                        RCLCPP_INFO(node->get_logger(),
+                            "RAW_Z=%.1f  FILT_Z=%.1f  window=%d",
+                            raw_z_now, corr_z*1000, (int)relative_filter.isStable());
+                    }
+
                     if (frame_count % 3 == 0) {
                         printSystemInfo(id0_found, id1_found, id2_found,
                                        id0_tvec[0], id0_tvec[1], id0_tvec[2],
