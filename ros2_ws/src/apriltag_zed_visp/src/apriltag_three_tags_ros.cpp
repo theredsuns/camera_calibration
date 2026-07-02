@@ -534,6 +534,20 @@ int main(int argc, char** argv) {
     // PnP uses ZERO distortion (image already remapped)
     Mat dist_coeffs = Mat::zeros(5, 1, CV_64F);
     cout << "✅ 去畸变映射已计算 → PnP 使用零畸变模型" << endl;
+
+    // Right camera: get intrinsics + compute undistortion map
+    auto zed_params_r = zed.getCameraInformation().camera_configuration.calibration_parameters.right_cam;
+    Mat camera_matrix_r = (Mat_<double>(3, 3) << zed_params_r.fx, 0, zed_params_r.cx,
+                                                      0, zed_params_r.fy, zed_params_r.cy,
+                                                      0, 0, 1);
+    Mat dist_coeffs_r = (Mat_<double>(5, 1) << zed_params_r.disto[0], zed_params_r.disto[1],
+                                                zed_params_r.disto[2], zed_params_r.disto[3],
+                                                zed_params_r.disto[4]);
+    Mat undist_map_rx, undist_map_ry;
+    cv::initUndistortRectifyMap(camera_matrix_r, dist_coeffs_r, Mat(), camera_matrix_r,
+                                Size(img_w, img_h), CV_16SC2, undist_map_rx, undist_map_ry);
+    cout << "✅ 右目内参: fx=" << zed_params_r.fx << " fy=" << zed_params_r.fy << endl;
+
     cout << "✅ 使用内参: " << (use_calib ? "标定 (内参+畸变均来自标定)" : "ZED出厂") << endl;
 
     Ptr<aruco::Dictionary> dictionary = 
@@ -558,8 +572,11 @@ int main(int argc, char** argv) {
     Vec3d id2_tvec, id2_rvec;
 
     Mat frame;
-    sl::Mat zed_img;
-    
+    sl::Mat zed_img, zed_img_r;
+    // Right camera tag poses
+    bool id0_r=false, id1_r=false, id2_r=false;
+    Vec3d id0_tvec_r, id0_rvec_r, id1_tvec_r, id1_rvec_r, id2_tvec_r, id2_rvec_r;
+
     namedWindow("三标签基准系统 (ID0+ID1 -> ID2)", WINDOW_NORMAL);
     resizeWindow("三标签基准系统 (ID0+ID1 -> ID2)", 1280, 720);
 
@@ -635,6 +652,30 @@ int main(int argc, char** argv) {
                            FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
                 }
 
+                // ---- RIGHT CAMERA: independent tag detection ----
+                zed.retrieveImage(zed_img_r, sl::VIEW::RIGHT);
+                Mat cv_img_r(zed_img_r.getHeight(), zed_img_r.getWidth(), CV_8UC4, zed_img_r.getPtr<sl::uchar1>());
+                cvtColor(cv_img_r, frame, COLOR_BGRA2BGR);
+                cv::remap(frame, frame, undist_map_rx, undist_map_ry, cv::INTER_LINEAR);
+
+                vector<int> ids_r; vector<vector<Point2f>> corners_r;
+                aruco::detectMarkers(frame, dictionary, corners_r, ids_r, params);
+                id0_r = id1_r = id2_r = false;
+                for (size_t i = 0; i < ids_r.size(); i++) {
+                    double tag_sz;
+                    if (ids_r[i] == BASE_TAG_ID_0) tag_sz = TAG_SIZE_ID0;
+                    else if (ids_r[i] == BASE_TAG_ID_1) tag_sz = TAG_SIZE_ID1;
+                    else if (ids_r[i] == TARGET_TAG_ID) tag_sz = TAG_SIZE_ID2;
+                    else continue;
+                    double h = tag_sz / 2;
+                    vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
+                    Vec3d rv, tv;
+                    solvePnP(obj, corners_r[i], camera_matrix_r, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
+                    if (ids_r[i] == BASE_TAG_ID_0) { id0_r=true; id0_tvec_r=tv; id0_rvec_r=rv; }
+                    else if (ids_r[i] == BASE_TAG_ID_1) { id1_r=true; id1_tvec_r=tv; id1_rvec_r=rv; }
+                    else { id2_r=true; id2_tvec_r=tv; id2_rvec_r=rv; }
+                }
+
                 if (id0_found && id2_found) {
                     frame_count++;
 
@@ -681,6 +722,36 @@ int main(int argc, char** argv) {
                         t2.at<double>(1) += ID0_TO_ID1_Y;
                         t2.at<double>(2) += ID0_TO_ID1_Z;
                         t_rel_raw = (t_rel_raw + t2) * 0.5;  // average translation
+                    }
+
+                    // Right camera path: independent PnP → average with left
+                    if (id0_r && id2_r) {
+                        Mat R_id0_r = rvecToMatrix(id0_rvec_r);
+                        Mat R_id2_r = rvecToMatrix(id2_rvec_r);
+                        Mat R_rel_r = R_id0_r.t() * R_id2_r;
+                        Mat t_r = R_id0_r.t() * Mat(Vec3d(id2_tvec_r[0]-id0_tvec_r[0],
+                                                          id2_tvec_r[1]-id0_tvec_r[1],
+                                                          id2_tvec_r[2]-id0_tvec_r[2]));
+
+                        // Dual-path for right too (via ID1 if visible)
+                        if (id1_r) {
+                            Mat R_id1_r = rvecToMatrix(id1_rvec_r);
+                            Mat R_rel2_r = R_id1_r.t() * R_id2_r;
+                            Vec3d r1r = matrixToRvec(R_rel_r);
+                            Vec3d r2r = matrixToRvec(R_rel2_r);
+                            R_rel_r = rvecToMatrix((r1r + r2r) * 0.5);
+                            Mat t2_r = R_id1_r.t() * Mat(Vec3d(id2_tvec_r[0]-id1_tvec_r[0],
+                                                               id2_tvec_r[1]-id1_tvec_r[1],
+                                                               id2_tvec_r[2]-id1_tvec_r[2]));
+                            t2_r.at<double>(0)+=ID0_TO_ID1_X; t2_r.at<double>(1)+=ID0_TO_ID1_Y; t2_r.at<double>(2)+=ID0_TO_ID1_Z;
+                            t_r = (t_r + t2_r) * 0.5;
+                        }
+
+                        // Average left+right: rotation (rvec) and translation
+                        Vec3d rv_l = matrixToRvec(R_rel);
+                        Vec3d rv_r = matrixToRvec(R_rel_r);
+                        R_rel = rvecToMatrix((rv_l + rv_r) * 0.5);
+                        t_rel_raw = (t_rel_raw + t_r) * 0.5;
                     }
 
                     Mat t_rel;
