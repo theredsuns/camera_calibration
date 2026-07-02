@@ -358,7 +358,9 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
                     double rel_distance, bool stable,
                     double rel1_x, double rel1_y, double rel1_z,
                     double rel1_rx, double rel1_ry, double rel1_rz,
-                    double rel1_dist) {
+                    double rel1_dist,
+                    bool id0_r, bool id2_r,
+                    double rrel_x, double rrel_y, double rrel_z) {
     system("clear");
     
     cout << "==================================================" << endl;
@@ -414,6 +416,16 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
         cout << "    姿态 (度): Rx: " << rel1_rx * 180.0 / CV_PI << "°" << endl;
         cout << "                Ry: " << rel1_ry * 180.0 / CV_PI << "°" << endl;
         cout << "                Rz: " << rel1_rz * 180.0 / CV_PI << "°" << endl;
+    }
+    cout << endl;
+    if (id0_r && id2_r) {
+        double rdist = sqrt(rrel_x*rrel_x + rrel_y*rrel_y + rrel_z*rrel_z);
+        cout << endl;
+        cout << "  [右眼] ID2 相对于 ID0 的位姿:" << endl;
+        cout << "    位置 (mm):  X: " << rrel_x*1000 << endl;
+        cout << "                Y: " << rrel_y*1000 << endl;
+        cout << "                Z: " << rrel_z*1000 << endl;
+        cout << "    距离:      " << rdist*1000 << " mm" << endl;
     }
     cout << endl;
     cout << "  话题数据: [x, y, z, distance, rx, ry, rz, id0_ok, id1_ok, id2_ok]" << endl;
@@ -890,6 +902,16 @@ int main(int argc, char** argv) {
                     }
 
                     if (true) {
+                        // Right-eye relative pose for comparison
+                        double rrx=0, rry=0, rrz=0;
+                        if (id0_r && id2_r) {
+                            Mat R0r = rvecToMatrix(id0_rvec_r);
+                            Mat tr = R0r.t() * Mat(Vec3d(id2_tvec_r[0]-id0_tvec_r[0],
+                                                          id2_tvec_r[1]-id0_tvec_r[1],
+                                                          id2_tvec_r[2]-id0_tvec_r[2]));
+                            rrx=tr.at<double>(0); rry=tr.at<double>(1); rrz=tr.at<double>(2);
+                        }
+
                         printSystemInfo(id0_found, id1_found, id2_found,
                                        id0_tvec[0], id0_tvec[1], id0_tvec[2],
                                        id1_found ? id1_tvec[0] : 0,
@@ -898,7 +920,8 @@ int main(int argc, char** argv) {
                                        corr_x, corr_y, corr_z,
                                        corr_rx, corr_ry, corr_rz,
                                        smooth_dist, relative_filter.isStable(),
-                                       r1x, r1y, r1z, r1rx, r1ry, r1rz, r1d);
+                                       r1x, r1y, r1z, r1rx, r1ry, r1rz, r1d,
+                                       id0_r, id2_r, rrx, rry, rrz);
                     }
 
                     node->publishRelative(
