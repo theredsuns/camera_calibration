@@ -105,7 +105,7 @@ private:
 public:
     AdvancedFilter(int size = 30, double smooth_factor = 0.3) 
         : max_size(size), alpha(smooth_factor), initialized(false),
-          kf_x(0.001, 0.005), kf_y(0.001, 0.005), kf_z(0.0005, 0.02),
+          kf_x(0.001, 0.005), kf_y(0.001, 0.005), kf_z(0.001, 0.005),
           kf_rx(0.001, 0.01), kf_ry(0.001, 0.01), kf_rz(0.001, 0.01),
           kf_dist(0.001, 0.005) {
         last_filtered = last_x = last_y = last_z = 0;
@@ -139,7 +139,7 @@ public:
 
         double jump_dist = sqrt(pow(x - last_x, 2) + pow(y - last_y, 2) + pow(z - last_z, 2)) * 1000.0;
         double jump_rot = sqrt(pow(rx - last_rx, 2) + pow(ry - last_ry, 2) + pow(rz - last_rz, 2)) * 180.0 / M_PI;
-        if (jump_dist > 10.0 || jump_rot > 8.0) return;
+        if (jump_dist > 20.0 || jump_rot > 8.0) return;
 
         history.push_back(distance);
         history_x.push_back(x);
@@ -564,8 +564,8 @@ int main(int argc, char** argv) {
     params->cornerRefinementMaxIterations = 100;
     params->cornerRefinementMinAccuracy = 0.001;
 
-    AdvancedFilter relative_filter(500, 0.005);   // ID2→ID0: ultra-heavy smoothing
-    AdvancedFilter id1_filter(500, 0.005);         // ID1→ID0
+    AdvancedFilter relative_filter(300, 0.008);   // ID2→ID0: ultra-heavy smoothing
+    AdvancedFilter id1_filter(300, 0.008);         // ID1→ID0
 
     // Adaptive filtering: track raw relative pose velocity for assembly detection
     Vec3d prev_raw_rel_t(0, 0, 0);
