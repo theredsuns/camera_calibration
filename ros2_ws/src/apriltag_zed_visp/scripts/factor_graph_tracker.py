@@ -157,11 +157,12 @@ def main():
 
         detections = detect_tags(frame, dictionary, aruco_p)
         obs = {BASE_ID0: None, BASE_ID1: None, TARGET_ID2: None}
+        print(f"Detected tags: {detections}")
         for tid, corners in detections:
-            if tid not in obs: continue
+            if tid not in obs: print(f"Ignoring tag ID={tid}"); continue
             sz = {BASE_ID0:TAG_SIZE_ID0, BASE_ID1:TAG_SIZE_ID1, TARGET_ID2:TAG_SIZE_ID2}[tid]
             rv, tv, err = pnp_tag(corners, sz, calib_K, D_zero)
-            if rv is not None and err < 0.015:
+            if rv is not None and err < 0.05:
                 obs[tid] = TagObs(tid, corners, rv, tv, err)
                 cv2.polylines(frame, [corners.astype(int)], True,
                              {BASE_ID0:(255,0,0), BASE_ID1:(255,0,255), TARGET_ID2:(0,0,255)}[tid], 2)
