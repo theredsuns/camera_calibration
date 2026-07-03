@@ -24,8 +24,8 @@ using namespace std;
 using namespace cv;
 using namespace std::chrono_literals;
 
-const double TAG_SIZE_ID0 = 0.06;  // 6cm
-const double TAG_SIZE_ID1 = 0.06;  // 6cm
+const double TAG_SIZE_ID0 = 0.15;  // 15cm
+const double TAG_SIZE_ID1 = 0.15;  // 15cm
 const double TAG_SIZE_ID2 = 0.06;  // 6cm
 const int BASE_TAG_ID_0 = 0;
 const int BASE_TAG_ID_1 = 1;
