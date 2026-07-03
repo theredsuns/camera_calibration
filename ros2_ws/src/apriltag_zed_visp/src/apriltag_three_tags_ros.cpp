@@ -874,11 +874,7 @@ int main(int argc, char** argv) {
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
 
                     // Extra-strong EMA on distance for stability
-                    static double dist_ema = 0; static bool dist_init = false;
                     double cur_dist = sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z);
-                    if (!dist_init) { dist_ema = cur_dist; dist_init = true; }
-                    dist_ema = 0.15 * cur_dist + 0.85 * dist_ema;
-                    smooth_dist = dist_ema;
                     if (id1_found && id1_filter.isStable()) {
                         // Current raw ID1→ID0 (from this frame)
                         double raw1_x = id1_tvec[0] - id0_tvec[0];  // in camera frame
