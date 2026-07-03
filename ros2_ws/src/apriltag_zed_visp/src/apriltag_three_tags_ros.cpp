@@ -829,17 +829,8 @@ int main(int argc, char** argv) {
                         stability_score = 0.95 * stability_score + 0.05 * 0.0;
                     }
 
-                    static double smooth_z_baseline = 0;
-                    static bool z_init = false;
-                    if (!z_init) {
-                        smooth_z_baseline = t_rel.at<double>(2,0);
-                        z_init = true;
-                    } else {
-                        smooth_z_baseline = 0.92 * smooth_z_baseline + 0.08 * t_rel.at<double>(2,0);
-                    }
-
                     relative_filter.add(
-                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), smooth_z_baseline,
+                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
                         rel_rvec[0], rel_rvec[1], rel_rvec[2],
                         rel_distance
                     );
