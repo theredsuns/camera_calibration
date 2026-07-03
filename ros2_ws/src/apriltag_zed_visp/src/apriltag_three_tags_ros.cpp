@@ -882,13 +882,13 @@ int main(int argc, char** argv) {
                     // Subtract the camera-induced shift from ID2→ID0
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
-                    if (id1_found && id1_filter.isStable()) {
-                        Mat R_id0_m = rvecToMatrix(id0_rvec);
-                        Mat t1_raw = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
-                        corr_x -= (t1_raw.at<double>(0) - r1x);
-                        corr_y -= (t1_raw.at<double>(1) - r1y);
-                        corr_z -= (t1_raw.at<double>(2) - r1z);
-                    }
+
+                    // Extra-strong EMA on distance for stability
+                    static double dist_ema = 0; static bool dist_init = false;
+                    double cur_dist = sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z);
+                    if (!dist_init) { dist_ema = cur_dist; dist_init = true; }
+                    dist_ema = 0.03 * cur_dist + 0.97 * dist_ema;
+                    smooth_dist = dist_ema;
                     if (id1_found && id1_filter.isStable()) {
                         // Current raw ID1→ID0 (from this frame)
                         double raw1_x = id1_tvec[0] - id0_tvec[0];  // in camera frame
