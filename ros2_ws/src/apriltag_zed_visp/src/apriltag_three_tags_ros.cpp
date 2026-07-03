@@ -708,6 +708,21 @@ int main(int argc, char** argv) {
                     else { id2_r=true; id2_tvec_r=tv; id2_rvec_r=rv; }
                 }
 
+                // Combined PnP: ID0+ID1 8 corners for more accurate reference pose
+                if (id0_found && id1_found) {
+                    double h0 = TAG_SIZE_ID0 / 2;
+                    vector<Point3f> id0_obj = {{-h0,h0,0},{h0,h0,0},{h0,-h0,0},{-h0,-h0,0}};
+                    vector<Point3f> all_obj = id0_obj;
+                    vector<Point2f> all_img(c0.begin(), c0.end());
+                    for (auto& p : id0_obj)
+                        all_obj.push_back(Point3f(p.x+ID0_TO_ID1_X, p.y+ID0_TO_ID1_Y, p.z+ID0_TO_ID1_Z));
+                    all_img.insert(all_img.end(), c1.begin(), c1.end());
+                    Vec3d rv_best, tv_best;
+                    solvePnP(id0_obj, vector<Point2f>(c0.begin(),c0.end()), camera_matrix, dist_coeffs, rv_best, tv_best, false, SOLVEPNP_IPPE);
+                    solvePnPRefineLM(all_obj, all_img, camera_matrix, dist_coeffs, rv_best, tv_best);
+                    id0_rvec = rv_best; id0_tvec = tv_best;
+                }
+
                 if (id0_found && id2_found) {
                     frame_count++;
 
