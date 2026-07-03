@@ -708,7 +708,6 @@ int main(int argc, char** argv) {
                     else { id2_r=true; id2_tvec_r=tv; id2_rvec_r=rv; }
                 }
 
-                // Combined PnP: ID0+ID1 8 corners for more accurate reference pose
                 if (id0_found && id1_found) {
                     double h0 = TAG_SIZE_ID0 / 2;
                     vector<Point3f> id0_obj = {{-h0,h0,0},{h0,h0,0},{h0,-h0,0},{-h0,-h0,0}};
