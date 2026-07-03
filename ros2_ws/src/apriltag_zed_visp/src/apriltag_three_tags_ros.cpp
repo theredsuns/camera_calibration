@@ -139,7 +139,6 @@ public:
 
         double jump_dist = sqrt(pow(x - last_x, 2) + pow(y - last_y, 2) + pow(z - last_z, 2)) * 1000.0;
         double jump_rot = sqrt(pow(rx - last_rx, 2) + pow(ry - last_ry, 2) + pow(rz - last_rz, 2)) * 180.0 / M_PI;
-        if (jump_dist > 100.0 || jump_rot > 8.0) return;
 
         history.push_back(distance);
         history_x.push_back(x);
