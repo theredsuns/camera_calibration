@@ -28,9 +28,9 @@ using namespace std::chrono_literals;
 // 系统常量配置
 // ============================================================
 // AprilTag 标签尺寸（单位：米）- 必须与实际标签尺寸一致
-const double TAG_SIZE_ID0 = 0.15;  // ID0 基准标签：15厘米
-const double TAG_SIZE_ID1 = 0.15;  // ID1 辅助标签：15厘米
-const double TAG_SIZE_ID2 = 0.06;  // ID2 目标标签：6厘米
+const double TAG_SIZE_ID0 = 0.077;  // ID0 基准标签：15厘米
+const double TAG_SIZE_ID1 = 0.077;  // ID1 辅助标签：15厘米
+const double TAG_SIZE_ID2 = 0.077;  // ID2 目标标签：6厘米
 
 // 标签 ID 定义
 const int BASE_TAG_ID_0 = 0;       // 主基准标签 ID
@@ -46,6 +46,11 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 // ============================================================
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
 int g_dbg_frame = 0;
+
+// 标定畸变系数全局变量
+// ============================================================
+bool g_use_calib_dist = false;
+vector<double> g_calib_dist_coeffs;
 
 // ============================================================
 // ID0 与 ID1 之间的已知物理距离（单位：米）
@@ -124,20 +129,20 @@ public:
         //          → 减小 q（相信模型，保持状态稳定）
         //          → 增大 r（不相信测量噪声）
 
-        // 计算调整因子
+        // 计算调整因子（优化：静止时更强滤波，运动时更快响应）
         double q_factor, r_factor;
-        if (residual_norm > 0.01) {
-            // 残差较大：物体可能在移动，快速响应
-            q_factor = 1.0 + adapt_factor * 5;
-            r_factor = 1.0 - adapt_factor * 3;
+        if (residual_norm > 0.008) {
+            // 残差较大：物体在移动，快速响应
+            q_factor = 1.0 + adapt_factor * 10;
+            r_factor = 1.0 - adapt_factor * 5;
         } else if (residual_norm > 0.002) {
             // 残差中等：轻微调整
-            q_factor = 1.0 + adapt_factor * 2;
-            r_factor = 1.0 - adapt_factor * 1;
+            q_factor = 1.0 + adapt_factor * 3;
+            r_factor = 1.0 - adapt_factor * 2;
         } else {
-            // 残差较小：物体静止，平滑滤波
-            q_factor = 1.0 - adapt_factor;
-            r_factor = 1.0 + adapt_factor;
+            // 残差较小：物体静止，强力平滑滤波
+            q_factor = 1.0 - adapt_factor * 2;
+            r_factor = 1.0 + adapt_factor * 2;
         }
 
         // 应用调整并限制范围
@@ -226,9 +231,9 @@ public:
     // smooth_factor: EMA 平滑因子（0.1=慢响应稳定，0.5=快响应）
     AdvancedFilter(int size = 30, double smooth_factor = 0.3) 
         : max_size(size), alpha(smooth_factor), initialized(false),
-          kf_x(0.001, 0.005), kf_y(0.001, 0.005), kf_z(0.001, 0.005),
-          kf_rx(0.001, 0.01), kf_ry(0.001, 0.01), kf_rz(0.001, 0.01),
-          kf_dist(0.001, 0.005) {
+          kf_x(0.0002, 0.002), kf_y(0.0002, 0.002), kf_z(0.0002, 0.002),
+          kf_rx(0.0005, 0.005), kf_ry(0.0005, 0.005), kf_rz(0.0005, 0.005),
+          kf_dist(0.0002, 0.002) {
         last_filtered = last_x = last_y = last_z = 0;
         last_rx = last_ry = last_rz = 0;
     }
@@ -545,10 +550,8 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
                     double rel1_dist,
                     bool id0_r, bool id2_r,
                     double rrel_x, double rrel_y, double rrel_z) {
-    system("clear");  // 清屏（Linux 终端）
-    
-    // 打印标题和系统状态
-    cout << "==================================================" << endl;
+    // 打印标题和系统状态（不刷新屏幕，直接追加）
+    cout << "\n\n==================================================" << endl;
     cout << "   三标签基准系统 (ID0+ID1 -> ID2)              " << endl;
     cout << "==================================================" << endl;
     cout << "  内参来源: " << g_intrinsics_source << endl;
@@ -560,6 +563,7 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
     cout << "  话题名: " << TOPIC_NAME << endl;
     cout << "  稳定状态: " << (stable ? "✅ 已稳定" : "⏳ 收敛中...") << endl;
     cout << "==================================================" << endl;
+    cout << endl;
     cout << fixed << setprecision(3);  // 输出精度：小数点后3位
     cout << endl;
 
@@ -670,16 +674,79 @@ int main(int argc, char** argv) {
          << " cx=" << zed_params.cx << " cy=" << zed_params.cy << endl;
 
     // ============================================================
-    // 使用 ZED 出厂内参（不使用自定义标定文件）
+    // 使用自定义标定文件内参
     // ============================================================
-    double fx = zed_params.fx;
-    double fy = zed_params.fy;
-    double cx = zed_params.cx;
-    double cy = zed_params.cy;
+    string calib_file = "/home/nkk/camera_calibration/version_1.yaml";
+    double fx, fy, cx, cy;
 
-    cout << "✅ 使用 ZED 出厂内参: fx=" << fx << " fy=" << fy
-         << " cx=" << cx << " cy=" << cy << endl;
-    g_intrinsics_source = "ZED 出厂 (factory)";
+    ifstream cf(calib_file);
+    if (cf.is_open()) {
+        string line;
+        vector<double> K(9, 0);
+        vector<double> D;
+        while (getline(cf, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            if (line.find("camera_matrix:") != string::npos) {
+                getline(cf, line); getline(cf, line); getline(cf, line);
+                size_t s = line.find('['), e = line.find(']');
+                if (s != string::npos && e != string::npos) {
+                    stringstream ss(line.substr(s+1, e-s-1));
+                    string v; int i = 0;
+                    while (getline(ss, v, ',') && i < 9) {
+                        v.erase(0, v.find_first_not_of(" \t"));
+                        K[i++] = stod(v);
+                    }
+                }
+            } else if (line.find("distortion_coefficients:") != string::npos) {
+                getline(cf, line); getline(cf, line); getline(cf, line);
+                size_t s = line.find('['), e = line.find(']');
+                if (s != string::npos && e != string::npos) {
+                    stringstream ss(line.substr(s+1, e-s-1));
+                    string v;
+                    while (getline(ss, v, ',')) {
+                        v.erase(0, v.find_first_not_of(" \t"));
+                        if (!v.empty()) D.push_back(stod(v));
+                    }
+                }
+            }
+        }
+        cf.close();
+        if (K[0] > 0) {
+            fx = K[0]; fy = K[4]; cx = K[2]; cy = K[5];
+            
+            cout << "\n📊 内参对比:" << endl;
+            cout << "┌──────────┬─────────────┬─────────────┬──────────┐" << endl;
+            cout << "│ 参数     │ 出厂内参     │ 标定内参     │ 差值(px) │" << endl;
+            cout << "├──────────┼─────────────┼─────────────┼──────────┤" << endl;
+            printf("│ fx       │ %11.2f │ %11.2f │ %+8.2f │\n", zed_params.fx, fx, fx - zed_params.fx);
+            printf("│ fy       │ %11.2f │ %11.2f │ %+8.2f │\n", zed_params.fy, fy, fy - zed_params.fy);
+            printf("│ cx       │ %11.2f │ %11.2f │ %+8.2f │\n", zed_params.cx, cx, cx - zed_params.cx);
+            printf("│ cy       │ %11.2f │ %11.2f │ %+8.2f │\n", zed_params.cy, cy, cy - zed_params.cy);
+            cout << "└──────────┴─────────────┴─────────────┴──────────┘" << endl;
+            
+            cout << "✅ 使用标定内参 (重投影误差: " << 0.133322 << "px)" << endl;
+            g_intrinsics_source = "标定 (version_1.yaml)";
+            
+            if (!D.empty()) {
+                cout << "✅ 使用标定畸变系数: ";
+                for (size_t i = 0; i < D.size(); ++i) {
+                    cout << D[i];
+                    if (i < D.size()-1) cout << ",";
+                }
+                cout << endl;
+                g_use_calib_dist = true;
+                g_calib_dist_coeffs = D;
+            }
+        } else {
+            fx = zed_params.fx; fy = zed_params.fy; cx = zed_params.cx; cy = zed_params.cy;
+            cout << "⚠️ 标定文件解析失败，使用 ZED 出厂内参" << endl;
+            g_intrinsics_source = "ZED 出厂 (factory)";
+        }
+    } else {
+        fx = zed_params.fx; fy = zed_params.fy; cx = zed_params.cx; cy = zed_params.cy;
+        cout << "⚠️ 标定文件不存在，使用 ZED 出厂内参" << endl;
+        g_intrinsics_source = "ZED 出厂 (factory)";
+    }
 
     // 更新全局显示字符串
     {
@@ -696,12 +763,21 @@ int main(int argc, char** argv) {
     // 3x3 内参矩阵：[fx, 0, cx; 0, fy, cy; 0, 0, 1]
     Mat camera_matrix = (Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
 
-    // 使用 ZED 出厂畸变系数（5参数）
-    Mat remap_dist = (Mat_<double>(5, 1) <<
-        zed_params.disto[0], zed_params.disto[1],
-        zed_params.disto[2], zed_params.disto[3],
-        zed_params.disto[4]);
-    cout << "✅ 去畸变使用 ZED 出厂畸变系数" << endl;
+    // 选择去畸变用的畸变系数
+    Mat remap_dist;
+    if (g_use_calib_dist && !g_calib_dist_coeffs.empty()) {
+        remap_dist = Mat(static_cast<int>(g_calib_dist_coeffs.size()), 1, CV_64F);
+        for (size_t i = 0; i < g_calib_dist_coeffs.size(); ++i) {
+            remap_dist.at<double>(static_cast<int>(i)) = g_calib_dist_coeffs[i];
+        }
+        cout << "✅ 去畸变使用标定畸变系数" << endl;
+    } else {
+        remap_dist = (Mat_<double>(5, 1) <<
+            zed_params.disto[0], zed_params.disto[1],
+            zed_params.disto[2], zed_params.disto[3],
+            zed_params.disto[4]);
+        cout << "✅ 去畸变使用 ZED 出厂畸变系数" << endl;
+    }
 
     // ============================================================
     // 预计算去畸变映射表（加速实时处理）
@@ -733,8 +809,6 @@ int main(int argc, char** argv) {
                                 Size(img_w, img_h), CV_16SC2, undist_map_rx, undist_map_ry);
     cout << "✅ 右目内参: fx=" << zed_params_r.fx << " fy=" << zed_params_r.fy << endl;
 
-    cout << "✅ 使用内参: ZED出厂" << endl;
-
     // ============================================================
     // 初始化 AprilTag 检测器
     // ============================================================
@@ -749,10 +823,10 @@ int main(int argc, char** argv) {
     params->cornerRefinementMinAccuracy = 0.001;                     // 收敛精度
 
     // ============================================================
-    // 创建滤波器实例
+    // 创建滤波器实例（加强滤波，减小静态波动）
     // ============================================================
-    AdvancedFilter relative_filter(40, 0.10);    // ID2→ID0 相对位姿滤波器：窗口40帧，EMA系数0.10（平衡稳定与响应）
-    AdvancedFilter id1_filter(40, 0.10);         // ID1→ID0 相对位姿滤波器（用于稳定性参考和相机运动补偿）
+    AdvancedFilter relative_filter(60, 0.05);    // ID2→ID0：窗口60帧，EMA=0.05（更稳，响应稍慢）
+    AdvancedFilter id1_filter(60, 0.05);         // ID1→ID0：同样参数
 
     // ============================================================
     // 运行时变量
@@ -773,6 +847,7 @@ int main(int argc, char** argv) {
     // 创建显示窗口
     namedWindow("三标签基准系统 (ID0+ID1 -> ID2)", WINDOW_NORMAL);
     resizeWindow("三标签基准系统 (ID0+ID1 -> ID2)", 1280, 720);
+    cout << "✅ 显示窗口已创建，进入主循环..." << endl;
 
     // ============================================================
     // 主循环：图像采集 → 标签检测 → PnP → 相对位姿 → 滤波 → 发布
@@ -855,33 +930,9 @@ int main(int argc, char** argv) {
                     // ===== END DEBUG =====
 
                     // ============================================================
-                    // ZED 深度融合：用深度图修正 PnP 的 Z 值
-                    // 原理：标签角点对比度高，立体匹配更可靠；中心无纹理，深度不可靠
+                    // 深度融合已禁用（ZED深度噪声导致波动增大）
+                    // 使用纯 PnP 解算，通过滤波和双路径融合提高稳定性
                     // ============================================================
-                    float depth_sum = 0; int depth_n = 0;
-                    for (auto& p : corners[i]) {
-                        int px=(int)p.x, py=(int)p.y;
-                        // 检查角点是否在深度图范围内
-                        if (px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
-                            float d = depth_undist.at<float>(py, px);
-                            // 过滤无效深度值（小于0.1米或无穷大）
-                            if (d > 0.1 && std::isfinite(d)) { depth_sum += d; depth_n++; }
-                        }
-                    }
-                    // 如果至少有3个角点有有效深度
-                    if (depth_n >= 3) {
-                        float d_med = depth_sum / depth_n;  // 平均深度
-                        
-                        // ===== DEBUG: 记录 ZED 深度 Z 值（用于诊断）=====
-                        if (ids[i] == BASE_TAG_ID_0) g_dbg_zedz0 = d_med;
-                        else if (ids[i] == TARGET_TAG_ID) g_dbg_zedz2 = d_med;
-                        // ===== END DEBUG =====
-                        
-                        // 深度融合：当深度与 PnP 差距小于 0.3 米时才融合
-                        // 权重：50% 深度 + 50% PnP（降低深度噪声影响）
-                        if (std::abs(d_med - tv[2]) < 0.3)
-                            tv[2] = tv[2] * 0.5 + d_med * 0.5;
-                    }
 
                     // 保存标签位姿
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
@@ -931,27 +982,11 @@ int main(int argc, char** argv) {
                     frame_count++;
 
                     // ============================================================
-                    // 标尺校正：利用 ID0-ID1 已知距离校正 PnP 尺度
+                    // 标尺校正：已禁用（ID0-ID1距离未知）
+                    // ID0和ID1仅用于旋转平均和双路径融合提高稳定性
                     // ============================================================
                     double scale_factor = 1.0;
                     bool has_scale = false;
-                    if (id1_found) {
-                        // 计算 ID0-ID1 的测量距离
-                        double measured_d01 = norm(id1_tvec - id0_tvec);
-                        // 计算 ID0-ID1 的已知物理距离
-                        double known_d01 = sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X +
-                                                ID0_TO_ID1_Y*ID0_TO_ID1_Y +
-                                                ID0_TO_ID1_Z*ID0_TO_ID1_Z);
-                        if (measured_d01 > 0.01 && known_d01 > 0) {
-                            scale_factor = known_d01 / measured_d01;
-                            // 尺度因子在 0.8~1.2 范围内才有效（过滤异常值）
-                            if (scale_factor > 0.8 && scale_factor < 1.2) {
-                                has_scale = true;
-                            } else {
-                                scale_factor = 1.0;
-                            }
-                        }
-                    }
 
                     // ============================================================
                     // 相对旋转计算：R_rel = R_id0^T * R_id2
@@ -1040,16 +1075,16 @@ int main(int argc, char** argv) {
                         t_rel = t_rel_raw.clone();
                     }
 
-                    // ===== DEBUG: 输出 CSV 调试数据到 stderr =====
-                    {
-                        g_dbg_frame++;
-                        double relz_raw = t_rel_raw.at<double>(2,0);
-                        double relz_final = t_rel.at<double>(2,0);
-                        double sf = has_scale ? scale_factor : 1.0;
-                        fprintf(stderr, "DBGZ,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
-                                g_dbg_frame, g_dbg_pnpz0, g_dbg_zedz0, g_dbg_pnpz2, g_dbg_zedz2,
-                                relz_raw, sf, relz_final);
-                    }
+                    // ===== DEBUG: 输出 CSV 调试数据到 stderr (已禁用) =====
+                    // {
+                    //     g_dbg_frame++;
+                    //     double relz_raw = t_rel_raw.at<double>(2,0);
+                    //     double relz_final = t_rel.at<double>(2,0);
+                    //     double sf = has_scale ? scale_factor : 1.0;
+                    //     fprintf(stderr, "DBGZ,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
+                    //             g_dbg_frame, g_dbg_pnpz0, g_dbg_zedz0, g_dbg_pnpz2, g_dbg_zedz2,
+                    //             relz_raw, sf, relz_final);
+                    // }
                     // ===== END DEBUG =====
 
                     // ============================================================
@@ -1163,17 +1198,18 @@ int main(int argc, char** argv) {
                             rrx=tr.at<double>(0); rry=tr.at<double>(1); rrz=tr.at<double>(2);
                         }
 
-                        // 打印系统信息到终端
-                        printSystemInfo(id0_found, id1_found, id2_found,
-                                       id0_tvec[0], id0_tvec[1], id0_tvec[2],
-                                       id1_found ? id1_tvec[0] : 0,
-                                       id1_found ? id1_tvec[1] : 0,
-                                       id1_found ? id1_tvec[2] : 0,
-                                       corr_x, corr_y, corr_z,
-                                       corr_rx, corr_ry, corr_rz,
-                                       smooth_dist, relative_filter.isStable(),
-                                       r1x, r1y, r1z, r1rx, r1ry, r1rz, r1d,
-                                       id0_r, id2_r, rrx, rry, rrz);
+                        // 打印系统信息到终端（每10帧打印一次，约0.3秒）
+                        static int print_count = 0;
+                        if (print_count++ % 10 == 0) {
+                            cout << fixed << setprecision(3);
+                            cout << "\n[Frame " << frame_count << "] ";
+                            cout << "ID2->ID0: ";
+                            cout << "X=" << corr_x*1000 << " ";
+                            cout << "Y=" << corr_y*1000 << " ";
+                            cout << "Z=" << corr_z*1000 << " mm | ";
+                            cout << "dist=" << smooth_dist*1000 << " mm ";
+                            cout << (relative_filter.isStable() ? "✅" : "⏳") << endl;
+                        }
                     }
 
                     // 发布 ROS2 话题（单位：毫米）
@@ -1220,14 +1256,14 @@ int main(int argc, char** argv) {
                                FONT_HERSHEY_SIMPLEX, 0.4, Scalar(150, 150, 150), 1);
                     }
                 }
-
-                // 显示图像
-                imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
-
-                // 按 ESC 键退出
-                char key = waitKey(1);
-                if (key == 27) break;
             }
+
+            // 显示图像（无论是否检测到标签都显示）
+            imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
+
+            // 按 ESC 键退出
+            char key = waitKey(1);
+            if (key == 27) break;
         }
     }
 
