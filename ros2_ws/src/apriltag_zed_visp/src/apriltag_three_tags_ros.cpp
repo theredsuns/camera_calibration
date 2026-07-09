@@ -938,16 +938,14 @@ int main(int argc, char** argv) {
                     // Compute tag center (used for depth+display)
                     Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
 
-                    // ZED depth at TOP-LEFT corner (high contrast = reliable stereo match)
-                    Point2f tl = corners[i][0]; // ArUco corner[0] = top-left
+                    // ZED depth: sample 9x9 patch around tag center, median
                     double depth_z = -1;
-                    // Sample 5x5 patch around TL corner, take median
                     vector<float> dvals;
-                    for(int dy=-2;dy<=2;dy++) for(int dx=-2;dx<=2;dx++) {
-                        int px=(int)tl.x+dx, py=(int)tl.y+dy;
-                        if(px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
+                    for(int dy=-4;dy<=4;dy++) for(int dx=-4;dx<=4;dx++) {
+                        int px=(int)ctr.x+dx, py=(int)ctr.y+dy;
+                        if(px>=0 && px<depth_undist.cols && py>=0 && py<depth_undist.rows) {
                             float d = depth_undist.at<float>(py, px);
-                            if(d>0.1 && isfinite(d)) dvals.push_back(d);
+                            if(d > 0.001f && std::isfinite(d)) dvals.push_back(d);
                         }
                     }
                     if(!dvals.empty()) { sort(dvals.begin(),dvals.end()); depth_z=dvals[dvals.size()/2]; }
@@ -1272,8 +1270,8 @@ int main(int argc, char** argv) {
                     {
                         stringstream sd;
                         sd << fixed << setprecision(0);
-                        sd << "Depth_Z: ID0=" << (g_dbg_zedz0>0?to_string((int)(g_dbg_zedz0*1000)):"N/A")
-                           << "mm ID2=" << (g_dbg_zedz2>0?to_string((int)(g_dbg_zedz2*1000)):"N/A") << "mm";
+                        sd << "Depth_Z: ID0=" << g_dbg_zedz0*1000
+                           << "mm ID2=" << g_dbg_zedz2*1000 << "mm";
                         putText(frame_left, sd.str(), Point(20, 115),
                                FONT_HERSHEY_SIMPLEX, 0.45, Scalar(0, 255, 255), 1);
                     }
