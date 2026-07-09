@@ -935,16 +935,22 @@ int main(int argc, char** argv) {
                     // 使用纯 PnP 解算，通过滤波和双路径融合提高稳定性
                     // ============================================================
 
-                    // ZED depth at tag CORNERS (edges=texture, reliable)
-                    double depth_z = -1; int nv=0; float ds=0;
+                    // ZED depth: sample 3x3 patch around each corner, take median
+                    double depth_z = -1;
+                    vector<float> dvals;
                     for(auto& c : corners[i]) {
-                        int px=(int)c.x, py=(int)c.y;
-                        if(px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
-                            float d = depth_undist.at<float>(py, px);
-                            if(d>0.1 && isfinite(d)) { ds+=d; nv++; }
+                        for(int dy=-1;dy<=1;dy++) for(int dx=-1;dx<=1;dx++) {
+                            int px=(int)c.x+dx, py=(int)c.y+dy;
+                            if(px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
+                                float d = depth_undist.at<float>(py, px);
+                                if(d>0.1 && isfinite(d)) dvals.push_back(d);
+                            }
                         }
                     }
-                    if(nv>=3) depth_z = ds/nv;
+                    if(!dvals.empty()) {
+                        sort(dvals.begin(), dvals.end());
+                        depth_z = dvals[dvals.size()/2]; // median
+                    }
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=depth_z;
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=depth_z;
                     // 保存标签位姿
@@ -953,13 +959,13 @@ int main(int argc, char** argv) {
                     else { id2_rvec = rv; id2_tvec = tv; }
 
                     // 在图像上绘制 3D 坐标轴和标签名称
-                    aruco::drawAxis(frame, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
+                    aruco::drawAxis(frame_left, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
                     // Draw center cross on tag
                     Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
-                    cv::line(frame, Point(ctr.x-8,ctr.y), Point(ctr.x+8,ctr.y), axis_color, 2);
-                    cv::line(frame, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
-                    cv::circle(frame, ctr, 5, axis_color, 2);
-                    putText(frame, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
+                    cv::line(frame_left, Point(ctr.x-8,ctr.y), Point(ctr.x+8,ctr.y), axis_color, 2);
+                    cv::line(frame_left, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
+                    cv::circle(frame_left, ctr, 5, axis_color, 2);
+                    putText(frame_left, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
                            FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
                 }
 
