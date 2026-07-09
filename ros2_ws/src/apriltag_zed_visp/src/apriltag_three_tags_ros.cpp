@@ -920,6 +920,7 @@ int main(int argc, char** argv) {
                     
                     // 使用 IPPE 算法（针对平面目标优化的 PnP 算法）
                     solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
+                    Mat R_tag; Rodrigues(rv, R_tag); double cth = std::abs(R_tag.at<double>(2,2)); if (cth < 0.95 && cth > 0.3) tv[2] *= cth;
 
                     // ===== DEBUG: 记录原始 PnP Z 值（用于诊断 Z 轴波动）=====
                     {
