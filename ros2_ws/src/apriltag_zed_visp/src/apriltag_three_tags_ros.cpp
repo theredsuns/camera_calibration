@@ -919,8 +919,7 @@ int main(int argc, char** argv) {
                     vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
                     
                     // 使用 IPPE 算法（针对平面目标优化的 PnP 算法）
-                    if (!solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_EPNP)) solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_ITERATIVE);
-                    solvePnPRefineLM(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, TermCriteria(TermCriteria::EPS+TermCriteria::COUNT, 50, 1e-8));
+                    solvePnP(obj, corners[i], camera_matrix, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
 
                     // ===== DEBUG: 记录原始 PnP Z 值（用于诊断 Z 轴波动）=====
                     {
@@ -968,8 +967,7 @@ int main(int argc, char** argv) {
                     double h = tag_sz / 2;
                     vector<Point3f> obj = {{-h,h,0},{h,h,0},{h,-h,0},{-h,-h,0}};
                     Vec3d rv, tv;
-                    if (!solvePnP(obj, corners_r[i], camera_matrix_r, dist_coeffs, rv, tv, false, SOLVEPNP_EPNP)) solvePnP(obj, corners_r[i], camera_matrix_r, dist_coeffs, rv, tv, false, SOLVEPNP_ITERATIVE);
-                    solvePnPRefineLM(obj, corners_r[i], camera_matrix_r, dist_coeffs, rv, tv, TermCriteria(TermCriteria::EPS+TermCriteria::COUNT, 50, 1e-8));
+                    solvePnP(obj, corners_r[i], camera_matrix_r, dist_coeffs, rv, tv, false, SOLVEPNP_IPPE);
                     
                     if (ids_r[i] == BASE_TAG_ID_0) { id0_r=true; id0_tvec_r=tv; id0_rvec_r=rv; }
                     else if (ids_r[i] == BASE_TAG_ID_1) { id1_r=true; id1_tvec_r=tv; id1_rvec_r=rv; }
