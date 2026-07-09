@@ -964,7 +964,6 @@ int main(int argc, char** argv) {
                     cv::line(frame_left, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
                     cv::circle(frame_left, ctr, 5, axis_color, 2);
                     // Mark TL corner (depth sampling point) with a filled square
-                    cv::rectangle(frame_left, Point(tl.x-4,tl.y-4), Point(tl.x+4,tl.y+4), Scalar(0,255,255), -1);
                     putText(frame_left, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
                            FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
                 }
