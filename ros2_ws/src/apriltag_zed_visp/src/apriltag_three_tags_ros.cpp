@@ -935,6 +935,13 @@ int main(int argc, char** argv) {
                     // 使用纯 PnP 解算，通过滤波和双路径融合提高稳定性
                     // ============================================================
 
+                    // ZED depth at tag center (for comparison)
+                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+                    double depth_z = -1;
+                    if(ctr.x>0 && ctr.x<depth_undist.cols && ctr.y>0 && ctr.y<depth_undist.rows)
+                        depth_z = depth_undist.at<float>((int)ctr.y, (int)ctr.x);
+                    if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=depth_z;
+                    else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=depth_z;
                     // 保存标签位姿
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
                     else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
@@ -1240,8 +1247,17 @@ int main(int argc, char** argv) {
                     ss2 << "X=" << corr_x*1000
                         << " Y=" << corr_y*1000
                         << " Z=" << corr_z*1000 << " mm";
-                    putText(frame_left, ss2.str(), Point(20, 55), 
+                    putText(frame_left, ss2.str(), Point(20, 55),
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
+
+                    // Depth Z display (independent from PnP)
+                    if (g_dbg_zedz0 > 0 || g_dbg_zedz2 > 0) {
+                        stringstream sd;
+                        sd << fixed << setprecision(0);
+                        sd << "Depth_Z: ID0=" << g_dbg_zedz0*1000 << "mm ID2=" << g_dbg_zedz2*1000 << "mm";
+                        putText(frame_left, sd.str(), Point(20, 115),
+                               FONT_HERSHEY_SIMPLEX, 0.45, Scalar(0, 255, 255), 1);
+                    }
 
                     // 显示 ID1→ID0 参考信息
                     if (id1_found) {
