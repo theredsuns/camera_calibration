@@ -954,6 +954,11 @@ int main(int argc, char** argv) {
 
                     // 在图像上绘制 3D 坐标轴和标签名称
                     aruco::drawAxis(frame, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
+                    // Draw center cross on tag
+                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+                    cv::line(frame, Point(ctr.x-8,ctr.y), Point(ctr.x+8,ctr.y), axis_color, 2);
+                    cv::line(frame, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
+                    cv::circle(frame, ctr, 5, axis_color, 2);
                     putText(frame, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
                            FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
                 }
