@@ -938,11 +938,13 @@ int main(int argc, char** argv) {
                     // Compute tag center (used for depth+display)
                     Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
 
-                    // ZED depth at tag center - sample 7x7 patch, median
+                    // ZED depth at TOP-LEFT corner (high contrast = reliable stereo match)
+                    Point2f tl = corners[i][0]; // ArUco corner[0] = top-left
                     double depth_z = -1;
+                    // Sample 5x5 patch around TL corner, take median
                     vector<float> dvals;
-                    for(int dy=-3;dy<=3;dy++) for(int dx=-3;dx<=3;dx++) {
-                        int px=(int)ctr.x+dx, py=(int)ctr.y+dy;
+                    for(int dy=-2;dy<=2;dy++) for(int dx=-2;dx<=2;dx++) {
+                        int px=(int)tl.x+dx, py=(int)tl.y+dy;
                         if(px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
                             float d = depth_undist.at<float>(py, px);
                             if(d>0.1 && isfinite(d)) dvals.push_back(d);
@@ -959,10 +961,12 @@ int main(int argc, char** argv) {
 
                     // 在图像上绘制 3D 坐标轴和标签名称
                     aruco::drawAxis(frame_left, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
-                    // Draw center cross on tag (same point as depth sampling)
+                    // Draw center cross on tag
                     cv::line(frame_left, Point(ctr.x-8,ctr.y), Point(ctr.x+8,ctr.y), axis_color, 2);
                     cv::line(frame_left, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
                     cv::circle(frame_left, ctr, 5, axis_color, 2);
+                    // Mark TL corner (depth sampling point) with a filled square
+                    cv::rectangle(frame_left, Point(tl.x-4,tl.y-4), Point(tl.x+4,tl.y+4), Scalar(0,255,255), -1);
                     putText(frame_left, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
                            FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
                 }
