@@ -1269,7 +1269,6 @@ int main(int argc, char** argv) {
                     {
                         stringstream sd;
                         sd << fixed << setprecision(0);
-                        sd << "Depth_Z: ID0=" << g_dbg_zedz0*1000
                            << "mm ID2=" << g_dbg_zedz2*1000 << "mm";
                         putText(frame_left, sd.str(), Point(20, 115),
                                FONT_HERSHEY_SIMPLEX, 0.45, Scalar(0, 255, 255), 1);
