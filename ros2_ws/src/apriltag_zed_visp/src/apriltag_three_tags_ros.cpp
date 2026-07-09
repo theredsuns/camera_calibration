@@ -935,10 +935,11 @@ int main(int argc, char** argv) {
                     // 使用纯 PnP 解算，通过滤波和双路径融合提高稳定性
                     // ============================================================
 
-                    // ZED depth at tag center (same point as the cross)
+                    // Compute tag center (used for depth+display)
                     Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+
+                    // ZED depth at tag center - sample 7x7 patch, median
                     double depth_z = -1;
-                    // Sample 7x7 patch at center, take median (more robust)
                     vector<float> dvals;
                     for(int dy=-3;dy<=3;dy++) for(int dx=-3;dx<=3;dx++) {
                         int px=(int)ctr.x+dx, py=(int)ctr.y+dy;
@@ -950,6 +951,7 @@ int main(int argc, char** argv) {
                     if(!dvals.empty()) { sort(dvals.begin(),dvals.end()); depth_z=dvals[dvals.size()/2]; }
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=depth_z;
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=depth_z;
+
                     // 保存标签位姿
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
                     else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
@@ -957,8 +959,7 @@ int main(int argc, char** argv) {
 
                     // 在图像上绘制 3D 坐标轴和标签名称
                     aruco::drawAxis(frame_left, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
-                    // Draw center cross on tag
-                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+                    // Draw center cross on tag (same point as depth sampling)
                     cv::line(frame_left, Point(ctr.x-8,ctr.y), Point(ctr.x+8,ctr.y), axis_color, 2);
                     cv::line(frame_left, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
                     cv::circle(frame_left, ctr, 5, axis_color, 2);
