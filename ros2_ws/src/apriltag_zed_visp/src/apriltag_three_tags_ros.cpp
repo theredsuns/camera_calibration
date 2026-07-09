@@ -935,22 +935,19 @@ int main(int argc, char** argv) {
                     // 使用纯 PnP 解算，通过滤波和双路径融合提高稳定性
                     // ============================================================
 
-                    // ZED depth: sample 3x3 patch around each corner, take median
+                    // ZED depth at tag center (same point as the cross)
+                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
                     double depth_z = -1;
+                    // Sample 7x7 patch at center, take median (more robust)
                     vector<float> dvals;
-                    for(auto& c : corners[i]) {
-                        for(int dy=-1;dy<=1;dy++) for(int dx=-1;dx<=1;dx++) {
-                            int px=(int)c.x+dx, py=(int)c.y+dy;
-                            if(px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
-                                float d = depth_undist.at<float>(py, px);
-                                if(d>0.1 && isfinite(d)) dvals.push_back(d);
-                            }
+                    for(int dy=-3;dy<=3;dy++) for(int dx=-3;dx<=3;dx++) {
+                        int px=(int)ctr.x+dx, py=(int)ctr.y+dy;
+                        if(px>0 && px<depth_undist.cols && py>0 && py<depth_undist.rows) {
+                            float d = depth_undist.at<float>(py, px);
+                            if(d>0.1 && isfinite(d)) dvals.push_back(d);
                         }
                     }
-                    if(!dvals.empty()) {
-                        sort(dvals.begin(), dvals.end());
-                        depth_z = dvals[dvals.size()/2]; // median
-                    }
+                    if(!dvals.empty()) { sort(dvals.begin(),dvals.end()); depth_z=dvals[dvals.size()/2]; }
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=depth_z;
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=depth_z;
                     // 保存标签位姿
