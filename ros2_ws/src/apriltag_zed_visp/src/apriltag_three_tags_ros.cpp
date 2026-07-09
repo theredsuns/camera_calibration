@@ -1265,14 +1265,6 @@ int main(int argc, char** argv) {
                     putText(frame_left, ss2.str(), Point(20, 55),
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
-                    // Depth Z display (independent from PnP)
-                    {
-                        stringstream sd;
-                        sd << fixed << setprecision(0);
-                           << "mm ID2=" << g_dbg_zedz2*1000 << "mm";
-                        putText(frame_left, sd.str(), Point(20, 115),
-                               FONT_HERSHEY_SIMPLEX, 0.45, Scalar(0, 255, 255), 1);
-                    }
 
                     // 显示 ID1→ID0 参考信息
                     if (id1_found) {
