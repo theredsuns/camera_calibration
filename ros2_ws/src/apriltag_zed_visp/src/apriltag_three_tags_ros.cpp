@@ -1183,6 +1183,9 @@ int main(int argc, char** argv) {
                         t_rel.at<double>(0) -= (t1r.at<double>(0)-g_ref_t[0]);
                         t_rel.at<double>(1) -= (t1r.at<double>(1)-g_ref_t[1]);
                         t_rel.at<double>(2) -= (t1r.at<double>(2)-g_ref_t[2]);
+                    double ref_d = sqrt(g_ref_t[0]*g_ref_t[0]+g_ref_t[1]*g_ref_t[1]+g_ref_t[2]*g_ref_t[2]);
+                    double cur_d = sqrt(t1r.at<double>(0)*t1r.at<double>(0)+t1r.at<double>(1)*t1r.at<double>(1)+t1r.at<double>(2)*t1r.at<double>(2));
+                    if(fabs(cur_d-ref_d)/ref_d > 0.05) putText(frame_left, "OUT OF RANGE", Point(img_w/2-80,60), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 2);
                     }
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
