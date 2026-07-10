@@ -59,9 +59,10 @@ vector<double> g_calib_dist_coeffs;
 // ID0 与 ID1 之间的已知物理距离（单位：米）
 // 这是标定好的刚体上两个标签的固定相对位置
 // ============================================================
-const double ID0_TO_ID1_X = 0.1587;  // X 轴距离：15.87厘米
-const double ID0_TO_ID1_Y = 0.000;   // Y 轴距离：0厘米（共面）
-const double ID0_TO_ID1_Z = 0.000;   // Z 轴距离：0厘米（共面）
+double ID0_TO_ID1_X = 0.1587;  // calibrated during first 50 frames
+double g_d01_calib_sum=0; int g_d01_calib_n=0; bool g_d01_calib_done=false;
+double ID0_TO_ID1_Y = 0.000;
+double ID0_TO_ID1_Z = 0.000;
 
 // ============================================================
 // 全局显示字符串（启动时填充，用于终端显示）
@@ -1027,6 +1028,18 @@ int main(int argc, char** argv) {
                 // 相对位姿计算：ID2 相对于 ID0 的位姿
                 // 条件：必须同时检测到 ID0 和 ID2
                 // ============================================================
+                // Calibration: measure ID0→ID1 distance over first 50 valid frames
+                if (!g_d01_calib_done && id1_found) {
+                    Mat R0c = rvecToMatrix(id0_rvec);
+                    Mat t1c = R0c.t() * (Mat(id1_tvec) - Mat(id0_tvec));
+                    double d01 = sqrt(t1c.at<double>(0)*t1c.at<double>(0) + t1c.at<double>(1)*t1c.at<double>(1) + t1c.at<double>(2)*t1c.at<double>(2));
+                    g_d01_calib_sum += d01; g_d01_calib_n++;
+                    if (g_d01_calib_n >= 50) {
+                        ID0_TO_ID1_X = g_d01_calib_sum / g_d01_calib_n;
+                        g_d01_calib_done = true;
+                        cout << "\n✅ Calibration done: ID0-ID1=" << ID0_TO_ID1_X*1000 << "mm (50 frames avg)" << endl;
+                    }
+                }
                 // Combined PnP: ID0+ID1 (8 corners) for stable reference frame
                 if (id0_found && id1_found) {
                     double h0 = TAG_SIZE_ID0/2;
@@ -1297,6 +1310,7 @@ int main(int argc, char** argv) {
                     // 显示距离和移动状态
                     stringstream ss;
                     ss << fixed << setprecision(1);
+                    if (!g_d01_calib_done) putText(frame_left, string("CALIBRATING ")+to_string(g_d01_calib_n)+"/50", Point(img_w/2-80,30), FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0,255,255), 2);
                     ss << "L: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
                        << (assembly_moving ? " [MOV]" : "");
                     putText(frame, ss.str(), Point(20, 30),
