@@ -45,6 +45,7 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 // 调试变量（用于诊断 Z 轴波动问题）
 // ============================================================
 double g_cap_x=0,g_cap_y=0,g_cap_z=0,g_cap_rx=0,g_cap_ry=0,g_cap_rz=0,g_cap_d=0,g_cap_r1x=0,g_cap_r1y=0,g_cap_r1z=0,g_cap_r1rx=0,g_cap_r1ry=0,g_cap_r1rz=0,g_cap_r1d=0;
+double g_cap_prev_d=0;
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
 int g_dbg_frame = 0;
@@ -1328,13 +1329,14 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
-            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready && fabs(g_cap_r1d-0.1587)<0.002) {
+            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready && fabs(g_cap_r1d-0.1587)<0.002 && (ln==0 || fabs(g_cap_d - g_cap_prev_d)<0.03)) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
             lf << setw(2) << ln << " | "
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
                << setw(6) << g_cap_rx*180/M_PI << " " << setw(6) << g_cap_ry*180/M_PI << " " << setw(6) << g_cap_rz*180/M_PI << " " << setw(7) << g_cap_d*1000 << " | "
                << setw(7) << g_cap_r1x*1000 << " " << setw(7) << g_cap_r1y*1000 << " " << setw(7) << g_cap_r1z*1000 << " "
                << setw(6) << g_cap_r1rx*180/M_PI << " " << setw(6) << g_cap_r1ry*180/M_PI << " " << setw(6) << g_cap_r1rz*180/M_PI << " " << setw(7) << g_cap_r1d*1000 << endl;
+                g_cap_prev_d = g_cap_d;
                 ln++;
                 cout << "Captured " << ln << "/100  ID2=" << g_cap_d*1000 << "mm R=(" << g_cap_rx*180/M_PI << "," << g_cap_ry*180/M_PI << "," << g_cap_rz*180/M_PI << ")deg | ID1=" << g_cap_r1d*1000 << "mm" << endl;
             }
