@@ -1329,7 +1329,7 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
-            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready && fabs(g_cap_r1d-0.1587)<0.002 && (ln==0 || fabs(g_cap_d - g_cap_prev_d)<0.03)) {
+            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready && fabs(g_cap_r1d-0.1587)<0.0015 && (ln==0 || fabs(g_cap_d - g_cap_prev_d)<0.03)) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
             lf << setw(2) << ln << " | "
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
