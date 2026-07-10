@@ -413,6 +413,8 @@ public:
     }
 
     // 判断滤波器是否已稳定（历史数据达到阈值）
+    int getCount() { lock_guard<mutex> lk(mtx); return (int)history.size(); }
+    int getMaxSize() const { return max_size; }
     bool isStable() {
         lock_guard<mutex> lock(mtx);
         return history.size() >= max_size * 0.6;
