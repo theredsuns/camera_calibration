@@ -1325,8 +1325,8 @@ int main(int argc, char** argv) {
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
 
             // 按 ESC 键退出
-            char key = waitKey(1);
-            if (key == 13 && ln < 100 && g_cap_ready) {
+            char key = waitKey(10);
+            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
                 lf << setw(2) << ln << " | "
                    << setw(9) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(9) << g_cap_y*1000 << " " << setw(9) << g_cap_z*1000 << " " << setw(9) << g_cap_d*1000 << " | "
