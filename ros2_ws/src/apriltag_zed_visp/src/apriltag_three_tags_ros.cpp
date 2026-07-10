@@ -1042,7 +1042,11 @@ int main(int argc, char** argv) {
                     // 相对旋转计算：R_rel = R_id0^T * R_id2
                     // 将 ID2 的旋转从相机坐标系转换到 ID0 坐标系
                     // ============================================================
-                    Mat R_id0 = rvecToMatrix(id0_rvec);
+                    // EMA on ID0 rotation to suppress angular jitter
+                    static Vec3d ema_r0(0,0,0); static bool ema_r0_ok=false;
+                    if(!ema_r0_ok){ema_r0=id0_rvec;ema_r0_ok=true;}
+                    ema_r0 = 0.12*id0_rvec + 0.88*ema_r0;
+                    Mat R_id0 = rvecToMatrix(ema_r0);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
                     
                     // 如果检测到 ID1，平均 ID0 和 ID1 的旋转（同刚体，噪声抵消）
@@ -1195,7 +1199,7 @@ int main(int argc, char** argv) {
                     // ============================================================
                     double r1x=0, r1y=0, r1z=0, r1rx=0, r1ry=0, r1rz=0, r1d=0;
                     if (id1_found) {
-                        Mat R_id0_m = rvecToMatrix(id0_rvec);
+                        Mat R_id0_m = rvecToMatrix(ema_r0);
                         Mat R_id1_m = rvecToMatrix(id1_rvec);
                         // ID1 相对于 ID0 的平移（在 ID0 坐标系下）
                         Mat t1 = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
@@ -1219,7 +1223,7 @@ int main(int argc, char** argv) {
                     // ============================================================
                     // Auto-calibrate ID0→ID1 distance
                     if (!g_d01_ready && id1_found) {
-                        Mat R0c=rvecToMatrix(id0_rvec); Mat t1c=R0c.t()*(Mat(id1_tvec)-Mat(id0_tvec));
+                        Mat R0c=rvecToMatrix(ema_r0); Mat t1c=R0c.t()*(Mat(id1_tvec)-Mat(id0_tvec));
                         g_d01_sum+=sqrt(t1c.at<double>(0)*t1c.at<double>(0)+t1c.at<double>(1)*t1c.at<double>(1)+t1c.at<double>(2)*t1c.at<double>(2));
                         g_d01_n++;
                         if(g_d01_n>=50){ ID0_TO_ID1_X=g_d01_sum/g_d01_n; g_d01_ready=true; cout<<"\nCALIB: ID0-ID1="<<ID0_TO_ID1_X*1000<<"mm (50 frames)"<<endl; }
