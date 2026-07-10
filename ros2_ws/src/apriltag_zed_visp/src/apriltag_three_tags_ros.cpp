@@ -864,7 +864,7 @@ int main(int argc, char** argv) {
             Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<float>());
             Mat depth_undist;
             // 对深度图应用去畸变（与图像去畸变对齐）
-            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_LINEAR);
+            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_NEAREST);
 
             // 将 ZED 图像转换为 OpenCV 格式（BGRA → BGR）
             Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
