@@ -874,7 +874,7 @@ int main(int argc, char** argv) {
             cv::remap(frame, frame, undist_map_x, undist_map_y, cv::INTER_LINEAR);
             Mat frame_left = frame.clone();  // 保存左目图像用于最终显示
                 // Center ROI box
-                int rx=img_w/4, ry=img_h/4, rw=img_w/2, rh=img_h/2;
+                int rx=img_w/8, ry=img_h/8, rw=img_w*3/4, rh=img_h*3/4;
                 cv::rectangle(frame_left, Point(rx,ry), Point(rx+rw,ry+rh), Scalar(100,100,100), 2);
 
             // ============================================================
@@ -1304,11 +1304,12 @@ int main(int argc, char** argv) {
                 Point2f p0=px(id0_tvec[0],id0_tvec[1],id0_tvec[2]);
                 Point2f p1=px(id1_tvec[0],id1_tvec[1],id1_tvec[2]);
                 Point2f p2=px(id2_tvec[0],id2_tvec[1],id2_tvec[2]);
+            bool dist_ok = (id0_tvec[2]>0.2 && id0_tvec[2]<0.8 && id2_tvec[2]>0.2 && id2_tvec[2]<0.8);
                 in_roi = p0.x>rx&&p0.x<rx+rw&&p0.y>ry&&p0.y<ry+rh
                       && p1.x>rx&&p1.x<rx+rw&&p1.y>ry&&p1.y<ry+rh
                       && p2.x>rx&&p2.x<rx+rw&&p2.y>ry&&p2.y<ry+rh;
             }
-            cv::putText(frame_left, in_roi?"VALID":"OUT OF ROI", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
+            cv::putText(frame_left, in_roi?"VALID (20-80cm)":"OUT OF RANGE", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
 
             // 按 ESC 键退出
