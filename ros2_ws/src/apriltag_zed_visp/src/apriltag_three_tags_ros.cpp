@@ -974,15 +974,7 @@ int main(int argc, char** argv) {
                     float rd = (rx>=0&&rx<depth_raw.cols&&ry>=0&&ry<depth_raw.rows) ? depth_raw.at<float>(ry,rx) : -1;
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=rd;
-                    else {
-                        // Reprojection check for ID2: reject bad PnP solutions
-                        vector<Point2f> proj;
-                        projectPoints(obj, rv, tv, camera_matrix, dist_coeffs, proj);
-                        double rerr=0;
-                        for(int k=0;k<4;k++) rerr+=norm(corners[i][k]-proj[k]);
-                        rerr/=4;
-                        if(rerr<1.5) { id2_rvec=rv; id2_tvec=tv; g_dbg_zedz2=0; } else { g_dbg_zedz2=-1; }
-                    }
+                    else { id2_rvec = rv; id2_tvec = tv; }
 
                     // 在图像上绘制 3D 坐标轴和标签名称
                     aruco::drawAxis(frame_left, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
