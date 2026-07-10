@@ -1369,7 +1369,6 @@ int main(int argc, char** argv) {
             }
             cv::putText(frame_left, in_roi?"VALID (20-80cm)":"OUT OF RANGE", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
-            if(g_bref_ok&&id1_found){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); double d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); double mv=fabs((d01-g_bref_d01)*1000); double dd=fabs((g_cap_d-g_bref_d02)*1000); stringstream sb; sb<<fixed<<setprecision(1)<<"dCAM:"<<mv<<"mm dID2:"<<dd<<"mm"; putText(frame_left,sb.str(),Point(img_w-230,50),FONT_HERSHEY_SIMPLEX,0.45,mv<2?Scalar(0,255,0):Scalar(0,0,255),2); }
 
             // 按 ESC 键退出
             char key = waitKey(10);
