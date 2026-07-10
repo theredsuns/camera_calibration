@@ -955,6 +955,12 @@ int main(int argc, char** argv) {
                     // 保存标签位姿
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
                     else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
+                    // ZED raw depth at tag center
+                    Point2f ctr2(0,0); for(auto& c : corners[i]) ctr2+=c; ctr2*=0.25f;
+                    int rx=(int)ctr2.x, ry=(int)ctr2.y;
+                    float rd = (rx>=0&&rx<depth_raw.cols&&ry>=0&&ry<depth_raw.rows) ? depth_raw.at<float>(ry,rx) : -1;
+                    if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
+                    else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=rd;
                     else { id2_rvec = rv; id2_tvec = tv; }
 
                     // 在图像上绘制 3D 坐标轴和标签名称
@@ -1283,6 +1289,7 @@ int main(int argc, char** argv) {
             }
 
             // 显示图像（无论是否检测到标签都显示）
+            stringstream sd; sd<<fixed<<setprecision(0)<<"Depth: ID0="<<g_dbg_zedz0<<" ID2="<<g_dbg_zedz2<<"mm"; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,255,255),1);
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
 
             // 按 ESC 键退出
