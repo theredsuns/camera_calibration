@@ -1027,6 +1027,21 @@ int main(int argc, char** argv) {
                 // 相对位姿计算：ID2 相对于 ID0 的位姿
                 // 条件：必须同时检测到 ID0 和 ID2
                 // ============================================================
+                // Combined PnP: ID0+ID1 (8 corners) for stable reference frame
+                if (id0_found && id1_found) {
+                    double h0 = TAG_SIZE_ID0/2;
+                    vector<Point3f> id0_pts = {{ -h0, h0,0},{ h0, h0,0},{ h0,-h0,0},{-h0,-h0,0}};
+                    vector<Point3f> all_pts = id0_pts;
+                    vector<Point2f> all_img(c0.begin(), c0.end());
+                    for(auto& p : id0_pts) all_pts.push_back(Point3f(p.x+ID0_TO_ID1_X, p.y+ID0_TO_ID1_Y, p.z+ID0_TO_ID1_Z));
+                    all_img.insert(all_img.end(), c1.begin(), c1.end());
+                    Vec3d rv8, tv8;
+                    // IPPE on 4 ID0 points for initial guess, then LM on all 8
+                    if(solvePnP(id0_pts, vector<Point2f>(c0.begin(),c0.end()), camera_matrix, dist_coeffs, rv8, tv8, false, SOLVEPNP_IPPE)) {
+                        solvePnPRefineLM(all_pts, all_img, camera_matrix, dist_coeffs, rv8, tv8);
+                        id0_rvec = rv8; id0_tvec = tv8;
+                    }
+                }
                 if (id0_found && id2_found) {
                     frame_count++;
 
