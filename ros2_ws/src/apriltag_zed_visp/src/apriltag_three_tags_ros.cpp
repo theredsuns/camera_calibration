@@ -864,7 +864,7 @@ int main(int argc, char** argv) {
             Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<float>());
             Mat depth_undist;
             // 对深度图应用去畸变（与图像去畸变对齐）
-            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_LINEAR);
+            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_NEAREST);
 
             // 将 ZED 图像转换为 OpenCV 格式（BGRA → BGR）
             Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
@@ -955,6 +955,12 @@ int main(int argc, char** argv) {
                     // 保存标签位姿
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
                     else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
+                    // ZED raw depth at tag center (for debug)
+                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+                    int rpx=(int)ctr.x, rpy=(int)ctr.y;
+                    float raw_d = (rpx>=0&&rpx<depth_raw.cols&&rpy>=0&&rpy<depth_raw.rows) ? depth_raw.at<float>(rpy,rpx) : -1;
+                    if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=raw_d;
+                    else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=raw_d;
                     else { id2_rvec = rv; id2_tvec = tv; }
 
                     // 在图像上绘制 3D 坐标轴和标签名称
@@ -1283,6 +1289,7 @@ int main(int argc, char** argv) {
             }
 
             // 显示图像（无论是否检测到标签都显示）
+            stringstream sd; sd<<fixed<<setprecision(1)<<"RawDepth: ID0="<<g_dbg_zedz0<<"mm ID2="<<g_dbg_zedz2<<"mm"; putText(frame_left, sd.str(), Point(20,130), FONT_HERSHEY_SIMPLEX, 0.45, Scalar(0,255,255), 1);
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
 
             // 按 ESC 键退出
