@@ -28,9 +28,9 @@ using namespace std::chrono_literals;
 // 系统常量配置
 // ============================================================
 // AprilTag 标签尺寸（单位：米）- 必须与实际标签尺寸一致
-const double TAG_SIZE_ID0 = 0.064;  // ID0 基准标签：15厘米
-const double TAG_SIZE_ID1 = 0.064;  // ID1 辅助标签：15厘米
-const double TAG_SIZE_ID2 = 0.064;  // ID2 目标标签：6厘米
+const double TAG_SIZE_ID0 = 0.0644;  // ID0 基准标签：15厘米
+const double TAG_SIZE_ID1 = 0.0644;  // ID1 辅助标签：15厘米
+const double TAG_SIZE_ID2 = 0.0644;  // ID2 目标标签：6厘米
 
 // 标签 ID 定义
 const int BASE_TAG_ID_0 = 0;       // 主基准标签 ID
@@ -59,8 +59,7 @@ vector<double> g_calib_dist_coeffs;
 // ID0 与 ID1 之间的已知物理距离（单位：米）
 // 这是标定好的刚体上两个标签的固定相对位置
 // ============================================================
-double ID0_TO_ID1_X = 0;  // auto-calibrated from first 50 frames
-double g_d01_sum=0; int g_d01_n=0; bool g_d01_ready=false;
+const double ID0_TO_ID1_X = 0.1587;  // X 轴距离：15.87厘米
 const double ID0_TO_ID1_Y = 0.000;   // Y 轴距离：0厘米（共面）
 const double ID0_TO_ID1_Z = 0.000;   // Z 轴距离：0厘米（共面）
 
@@ -413,8 +412,6 @@ public:
     }
 
     // 判断滤波器是否已稳定（历史数据达到阈值）
-    int getCount() { lock_guard<mutex> lk(mtx); return (int)history.size(); }
-    int getMaxSize() const { return max_size; }
     bool isStable() {
         lock_guard<mutex> lock(mtx);
         return history.size() >= max_size * 0.6;
@@ -976,7 +973,15 @@ int main(int argc, char** argv) {
                     float rd = (rx>=0&&rx<depth_raw.cols&&ry>=0&&ry<depth_raw.rows) ? depth_raw.at<float>(ry,rx) : -1;
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=rd;
-                    else { id2_rvec = rv; id2_tvec = tv; }
+                    else {
+                        // Reprojection check for ID2: reject bad PnP solutions
+                        vector<Point2f> proj;
+                        projectPoints(obj, rv, tv, camera_matrix, dist_coeffs, proj);
+                        double rerr=0;
+                        for(int k=0;k<4;k++) rerr+=norm(corners[i][k]-proj[k]);
+                        rerr/=4;
+                        if(rerr<1.5) { id2_rvec=rv; id2_tvec=tv; g_dbg_zedz2=0; } else { g_dbg_zedz2=-1; }
+                    }
 
                     // 在图像上绘制 3D 坐标轴和标签名称
                     aruco::drawAxis(frame_left, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
@@ -1022,6 +1027,21 @@ int main(int argc, char** argv) {
                 // 相对位姿计算：ID2 相对于 ID0 的位姿
                 // 条件：必须同时检测到 ID0 和 ID2
                 // ============================================================
+                // Combined PnP: ID0+ID1 (8 corners) for stable reference frame
+                if (id0_found && id1_found) {
+                    double h0 = TAG_SIZE_ID0/2;
+                    vector<Point3f> id0_pts = {{ -h0, h0,0},{ h0, h0,0},{ h0,-h0,0},{-h0,-h0,0}};
+                    vector<Point3f> all_pts = id0_pts;
+                    vector<Point2f> all_img(c0.begin(), c0.end());
+                    for(auto& p : id0_pts) all_pts.push_back(Point3f(p.x+ID0_TO_ID1_X, p.y+ID0_TO_ID1_Y, p.z+ID0_TO_ID1_Z));
+                    all_img.insert(all_img.end(), c1.begin(), c1.end());
+                    Vec3d rv8, tv8;
+                    // IPPE on 4 ID0 points for initial guess, then LM on all 8
+                    if(solvePnP(id0_pts, vector<Point2f>(c0.begin(),c0.end()), camera_matrix, dist_coeffs, rv8, tv8, false, SOLVEPNP_IPPE)) {
+                        solvePnPRefineLM(all_pts, all_img, camera_matrix, dist_coeffs, rv8, tv8);
+                        id0_rvec = rv8; id0_tvec = tv8;
+                    }
+                }
                 if (id0_found && id2_found) {
                     frame_count++;
 
@@ -1036,11 +1056,7 @@ int main(int argc, char** argv) {
                     // 相对旋转计算：R_rel = R_id0^T * R_id2
                     // 将 ID2 的旋转从相机坐标系转换到 ID0 坐标系
                     // ============================================================
-                    // EMA on ID0 rotation to suppress angular jitter
-                    static Vec3d ema_r0(0,0,0); static bool ema_r0_ok=false;
-                    if(!ema_r0_ok){ema_r0=id0_rvec;ema_r0_ok=true;}
-                    ema_r0 = 0.05*id0_rvec + 0.95*ema_r0;
-                    Mat R_id0 = rvecToMatrix(ema_r0);
+                    Mat R_id0 = rvecToMatrix(id0_rvec);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
                     
                     // 如果检测到 ID1，平均 ID0 和 ID1 的旋转（同刚体，噪声抵消）
@@ -1193,7 +1209,7 @@ int main(int argc, char** argv) {
                     // ============================================================
                     double r1x=0, r1y=0, r1z=0, r1rx=0, r1ry=0, r1rz=0, r1d=0;
                     if (id1_found) {
-                        Mat R_id0_m = rvecToMatrix(ema_r0);
+                        Mat R_id0_m = rvecToMatrix(id0_rvec);
                         Mat R_id1_m = rvecToMatrix(id1_rvec);
                         // ID1 相对于 ID0 的平移（在 ID0 坐标系下）
                         Mat t1 = R_id0_m.t() * (Mat(id1_tvec) - Mat(id0_tvec));
@@ -1215,13 +1231,6 @@ int main(int argc, char** argv) {
                     // 当相机移动时，ID1→ID0 的原始测量会变化，这个变化量就是相机运动引起的
                     // 将这个变化量从 ID2→ID0 的结果中减去，消除相机运动的影响
                     // ============================================================
-                    // Auto-calibrate ID0→ID1 distance
-                    if (!g_d01_ready && id1_found) {
-                        Mat R0c=rvecToMatrix(ema_r0); Mat t1c=R0c.t()*(Mat(id1_tvec)-Mat(id0_tvec));
-                        g_d01_sum+=sqrt(t1c.at<double>(0)*t1c.at<double>(0)+t1c.at<double>(1)*t1c.at<double>(1)+t1c.at<double>(2)*t1c.at<double>(2));
-                        g_d01_n++;
-                        if(g_d01_n>=50){ ID0_TO_ID1_X=g_d01_sum/g_d01_n; g_d01_ready=true; cout<<"\nCALIB: ID0-ID1="<<ID0_TO_ID1_X*1000<<"mm (50 frames)"<<endl; }
-                    }
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
 
@@ -1288,7 +1297,6 @@ int main(int argc, char** argv) {
                     // 显示距离和移动状态
                     stringstream ss;
                     ss << fixed << setprecision(1);
-                    if(!g_d01_ready) putText(frame_left, "CALIB "+to_string(g_d01_n)+"/50", Point(img_w/2-80,30), FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0,255,255), 2);
                     ss << "L: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
                        << (assembly_moving ? " [MOV]" : "");
                     putText(frame, ss.str(), Point(20, 30),
@@ -1344,7 +1352,7 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
-            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready) {
+            if ((key == 13 || key == 32) && ln < 100 && g_cap_ready && fabs(g_cap_r1d-0.1587)<0.0015 && (ln==0 || fabs(g_cap_d - g_cap_prev_d)<0.03)) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
             lf << setw(2) << ln << " | "
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
