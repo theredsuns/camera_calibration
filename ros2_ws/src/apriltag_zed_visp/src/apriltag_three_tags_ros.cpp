@@ -1045,7 +1045,7 @@ int main(int argc, char** argv) {
                     // EMA on ID0 rotation to suppress angular jitter
                     static Vec3d ema_r0(0,0,0); static bool ema_r0_ok=false;
                     if(!ema_r0_ok){ema_r0=id0_rvec;ema_r0_ok=true;}
-                    ema_r0 = 0.12*id0_rvec + 0.88*ema_r0;
+                    ema_r0 = 0.05*id0_rvec + 0.95*ema_r0;
                     Mat R_id0 = rvecToMatrix(ema_r0);
                     Mat R_id2 = rvecToMatrix(id2_rvec);
                     
