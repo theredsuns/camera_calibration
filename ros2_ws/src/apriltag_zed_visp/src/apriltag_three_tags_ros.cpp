@@ -1167,19 +1167,11 @@ int main(int argc, char** argv) {
                     // ============================================================
                     // 滤波处理：将当前位姿加入滤波器
                     // ============================================================
-                    // Motion gate: freeze filter when reference body moves
-                    static Vec3d prev_id0t(0,0,0); static bool prev_ok=false;
-                    double id0_spd = prev_ok ? norm(id0_tvec-prev_id0t)*1000 : 0;
-                    prev_id0t=id0_tvec; prev_ok=true;
-                    if(id0_spd < 3.0) {
-                        relative_filter.add(
-                            t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
-                            rel_rvec[0], rel_rvec[1], rel_rvec[2],
-                            rel_distance
-                        );
-                    } else {
-                        putText(frame_left, "FROZEN", Point(img_w-120,30), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0,0,255), 2);
-                    }
+                    relative_filter.add(
+                        t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
+                        rel_rvec[0], rel_rvec[1], rel_rvec[2],
+                        rel_distance
+                    );
 
                     // 检测刚体是否在移动（变化量 > 5mm 视为移动）
                     bool assembly_moving = (delta_t > 5.0);
