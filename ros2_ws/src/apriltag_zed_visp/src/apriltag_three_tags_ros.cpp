@@ -873,6 +873,9 @@ int main(int argc, char** argv) {
             // 对图像进行去畸变（消除镜头畸变影响）
             cv::remap(frame, frame, undist_map_x, undist_map_y, cv::INTER_LINEAR);
             Mat frame_left = frame.clone();  // 保存左目图像用于最终显示
+                // Center ROI box
+                int rx=img_w/4, ry=img_h/4, rw=img_w/2, rh=img_h/2;
+                cv::rectangle(frame_left, Point(rx,ry), Point(rx+rw,ry+rh), Scalar(100,100,100), 2);
 
             // ============================================================
             // 左目相机：AprilTag 检测
@@ -1290,6 +1293,22 @@ int main(int argc, char** argv) {
 
             // 显示图像（无论是否检测到标签都显示）
             stringstream sd; sd<<fixed<<setprecision(0)<<"Depth: ID0="<<g_dbg_zedz0<<" ID2="<<g_dbg_zedz2<<"mm"; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,255,255),1);
+            // Check if all 3 tag centers are in ROI
+            bool in_roi = false;
+            if (id0_found && id1_found && id2_found) {
+                auto px = [&](double X, double Y, double Z) -> Point2f {
+                    double u = camera_matrix.at<double>(0,0)*X/Z + camera_matrix.at<double>(0,2);
+                    double v = camera_matrix.at<double>(1,1)*Y/Z + camera_matrix.at<double>(1,2);
+                    return Point2f(u,v);
+                };
+                Point2f p0=px(id0_tvec[0],id0_tvec[1],id0_tvec[2]);
+                Point2f p1=px(id1_tvec[0],id1_tvec[1],id1_tvec[2]);
+                Point2f p2=px(id2_tvec[0],id2_tvec[1],id2_tvec[2]);
+                in_roi = p0.x>rx&&p0.x<rx+rw&&p0.y>ry&&p0.y<ry+rh
+                      && p1.x>rx&&p1.x<rx+rw&&p1.y>ry&&p1.y<ry+rh
+                      && p2.x>rx&&p2.x<rx+rw&&p2.y>ry&&p2.y<ry+rh;
+            }
+            cv::putText(frame_left, in_roi?"VALID":"OUT OF ROI", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
 
             // 按 ESC 键退出
