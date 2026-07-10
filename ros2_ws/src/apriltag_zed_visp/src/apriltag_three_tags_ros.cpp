@@ -44,6 +44,8 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 // ============================================================
 // 调试变量（用于诊断 Z 轴波动问题）
 // ============================================================
+double g_cap_x=0,g_cap_y=0,g_cap_z=0,g_cap_d=0,g_cap_r1x=0,g_cap_r1y=0,g_cap_r1z=0,g_cap_r1d=0;
+bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
 int g_dbg_frame = 0;
 
@@ -855,6 +857,9 @@ int main(int argc, char** argv) {
     ofstream csv_f("/home/nkk/coordate_change/measurement_log.csv");
     csv_f<<"frame,X2,Y2,Z2,D2,X1,Y1,Z1,D1"<<endl;
     int csv_n=0;
+    ofstream lf("/home/nkk/coordate_change/measurement_log.txt");
+    lf<<"N | ID2_Xmm ID2_Ymm ID2_Zmm ID2_Dmm | ID1_Xmm ID1_Ymm ID1_Zmm ID1_Dmm | dd"<<endl;
+    int ln=0;
     while (rclcpp::ok()) {
         // 采集一帧图像（阻塞式，等待新帧）
         if (zed.grab() == sl::ERROR_CODE::SUCCESS) {
@@ -1204,6 +1209,9 @@ int main(int argc, char** argv) {
                     // ============================================================
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
+                    g_cap_x=corr_x; g_cap_y=corr_y; g_cap_z=corr_z;
+                    g_cap_d=sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z);
+                    if(id1_found){g_cap_r1x=r1x;g_cap_r1y=r1y;g_cap_r1z=r1z;g_cap_r1d=r1d;g_cap_ready=true;}
 
                     // 距离的额外强 EMA 平滑
                     double cur_dist = sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z);
@@ -1318,6 +1326,15 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(1);
+            if (key == 13 && ln < 100 && g_cap_ready) {
+                double dd = fabs(g_cap_d - g_cap_r1d);
+                lf << setw(2) << ln << " | "
+                   << setw(9) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(9) << g_cap_y*1000 << " " << setw(9) << g_cap_z*1000 << " " << setw(9) << g_cap_d*1000 << " | "
+                   << setw(9) << g_cap_r1x*1000 << " " << setw(9) << g_cap_r1y*1000 << " " << setw(9) << g_cap_r1z*1000 << " " << setw(9) << g_cap_r1d*1000 << " | "
+                   << setw(4) << dd*1000 << endl;
+                ln++;
+                cout << "Captured " << ln << "/100 ID2_d=" << g_cap_d*1000 << "mm ID1_d=" << g_cap_r1d*1000 << "mm dd=" << dd*1000 << "mm" << endl;
+            }
             if (key == 27) break;
         }
     }
