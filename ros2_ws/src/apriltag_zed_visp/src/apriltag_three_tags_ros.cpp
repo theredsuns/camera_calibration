@@ -1059,6 +1059,15 @@ int main(int argc, char** argv) {
                                         id2_tvec[1] - id0_tvec[1],
                                         id2_tvec[2] - id0_tvec[2]);
                     Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
+                    // Scale correction: use ID1→ID0 measured distance to fix PnP scale bias
+                    if(id1_found) {
+                        static double d01_true = 0; static bool d01_set = false;
+                        double d01_now = norm(id1_tvec - id0_tvec);
+                        if(!d01_set) { d01_true = d01_now; d01_set = true; }
+                        d01_true = 0.005*d01_now + 0.995*d01_true;
+                        double sf = d01_true / d01_now;
+                        if(sf>0.9 && sf<1.1) t_rel_raw = t_rel_raw * sf;
+                    }
                     // 3-frame median pre-filter on raw relative Z
                     static deque<double> z_pre3(3,0); static int z_pre3_n=0;
                     double myrawz = t_rel_raw.at<double>(2);
