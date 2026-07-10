@@ -1057,6 +1057,12 @@ int main(int argc, char** argv) {
                                         id2_tvec[1] - id0_tvec[1],
                                         id2_tvec[2] - id0_tvec[2]);
                     Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
+                    // 3-frame median pre-filter on raw relative Z
+                    static deque<double> z_pre3(3,0); static int z_pre3_n=0;
+                    double myrawz = t_rel_raw.at<double>(2);
+                    z_pre3[z_pre3_n%3] = myrawz; z_pre3_n++;
+                    if(z_pre3_n>=3){ vector<double> zs3(z_pre3.begin(),z_pre3.end()); sort(zs3.begin(),zs3.end());
+                        if(fabs(myrawz-zs3[1])>0.015) t_rel_raw.at<double>(2)=zs3[1]; }
 
                     // ============================================================
                     // 双路径融合：同时通过 ID0 和 ID1 计算相对位姿，取平均
