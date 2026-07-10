@@ -852,6 +852,9 @@ int main(int argc, char** argv) {
     // ============================================================
     // 主循环：图像采集 → 标签检测 → PnP → 相对位姿 → 滤波 → 发布
     // ============================================================
+    ofstream csv_f("/home/nkk/coordate_change/measurement_log.csv");
+    csv_f<<"frame,X2,Y2,Z2,D2,X1,Y1,Z1,D1"<<endl;
+    int csv_n=0;
     while (rclcpp::ok()) {
         // 采集一帧图像（阻塞式，等待新帧）
         if (zed.grab() == sl::ERROR_CODE::SUCCESS) {
