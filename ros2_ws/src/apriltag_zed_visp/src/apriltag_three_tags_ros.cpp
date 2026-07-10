@@ -45,7 +45,6 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 // 调试变量（用于诊断 Z 轴波动问题）
 // ============================================================
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
-double g_dbg_rawz0 = -1, g_dbg_rawz2 = -1;
 int g_dbg_frame = 0;
 
 // 标定畸变系数全局变量
@@ -865,7 +864,7 @@ int main(int argc, char** argv) {
             Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<float>());
             Mat depth_undist;
             // 对深度图应用去畸变（与图像去畸变对齐）
-            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_NEAREST);
+            cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_LINEAR);
 
             // 将 ZED 图像转换为 OpenCV 格式（BGRA → BGR）
             Mat cv_img(zed_img.getHeight(), zed_img.getWidth(), CV_8UC4, zed_img.getPtr<sl::uchar1>());
@@ -939,33 +938,19 @@ int main(int argc, char** argv) {
                     // Compute tag center (used for depth+display)
                     Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
 
-                    // ZED depth: sample RAW (un-remapped) depth at tag center
-                    // Use raw pixel coords before undistortion
-                    Point2f ctr_raw(0,0);
-                    // Find corresponding raw coords by inverse remap (approx: use undistort map)
-                    double depth_z_raw = -1, depth_z_undist = -1;
-                    // Raw depth at center (before remap)
-                    {
-                        int px=(int)ctr.x, py=(int)ctr.y;
-                        if(px>=0&&px<depth_raw.cols&&py>=0&&py<depth_raw.rows)
-                            depth_z_raw = depth_raw.at<float>(py, px);
-                    }
-                    // Undistorted depth at center
-                    {
-                        vector<float> dvals;
-                        for(int dy=-4;dy<=4;dy++) for(int dx=-4;dx<=4;dx++) {
-                            int px=(int)ctr.x+dx, py=(int)ctr.y+dy;
-                            if(px>=0&&px<depth_undist.cols&&py>=0&&py<depth_undist.rows) {
-                                float d = depth_undist.at<float>(py, px);
-                                if(d > 10.0f) dvals.push_back(d);
-                            }
+                    // ZED depth: sample 9x9 patch around tag center, median
+                    double depth_z = -1;
+                    vector<float> dvals;
+                    for(int dy=-4;dy<=4;dy++) for(int dx=-4;dx<=4;dx++) {
+                        int px=(int)ctr.x+dx, py=(int)ctr.y+dy;
+                        if(px>=0 && px<depth_undist.cols && py>=0 && py<depth_undist.rows) {
+                            float d = depth_undist.at<float>(py, px);
+                            if(d > 0.001f && std::isfinite(d)) dvals.push_back(d);
                         }
-                        if(!dvals.empty()) {sort(dvals.begin(),dvals.end()); depth_z_undist=dvals[dvals.size()/2];}
                     }
-                    // Use undist if valid else raw
-                    double depth_z = (depth_z_undist>0) ? depth_z_undist : depth_z_raw;
-                    if (ids[i]==BASE_TAG_ID_0) { g_dbg_zedz0=depth_z; g_dbg_rawz0=depth_z_raw; }
-                    else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=depth_z; g_dbg_rawz2=depth_z_raw; }
+                    if(!dvals.empty()) { sort(dvals.begin(),dvals.end()); depth_z=dvals[dvals.size()/2]; }
+                    if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=depth_z;
+                    else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=depth_z;
 
                     // 保存标签位姿
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
@@ -1295,15 +1280,6 @@ int main(int argc, char** argv) {
                                FONT_HERSHEY_SIMPLEX, 0.4, Scalar(150, 150, 150), 1);
                     }
                 }
-            }
-
-            // ZED depth vs PnP Z comparison
-            {
-                stringstream sd;
-                sd << fixed << setprecision(0);
-                sd << "Depth: raw=" << g_dbg_rawz0 << " remap=" << g_dbg_zedz0 << "mm  |  ID2=" << g_dbg_rawz2 << "/" << g_dbg_zedz2 << "mm";
-                putText(frame_left, sd.str(), Point(20, 130),
-                       FONT_HERSHEY_SIMPLEX, 0.4, Scalar(0, 255, 255), 1);
             }
 
             // 显示图像（无论是否检测到标签都显示）
