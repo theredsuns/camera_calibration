@@ -936,7 +936,7 @@ int main(int argc, char** argv) {
                     // ============================================================
 
                     // Compute tag center (used for depth+display)
-                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+                    // ctr already declared above
 
                     // ZED depth: sample 9x9 patch around tag center, median
                     double depth_z = -1;
@@ -956,7 +956,7 @@ int main(int argc, char** argv) {
                     if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
                     else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
                     // ZED raw depth at tag center (for debug)
-                    Point2f ctr(0,0); for(auto& c : corners[i]) ctr+=c; ctr*=0.25f;
+                    // ctr already declared above
                     int rpx=(int)ctr.x, rpy=(int)ctr.y;
                     float raw_d = (rpx>=0&&rpx<depth_raw.cols&&rpy>=0&&rpy<depth_raw.rows) ? depth_raw.at<float>(rpy,rpx) : -1;
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=raw_d;
