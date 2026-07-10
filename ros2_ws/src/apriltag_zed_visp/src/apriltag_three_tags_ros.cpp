@@ -46,6 +46,7 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 // ============================================================
 double g_cap_x=0,g_cap_y=0,g_cap_z=0,g_cap_rx=0,g_cap_ry=0,g_cap_rz=0,g_cap_d=0,g_cap_r1x=0,g_cap_r1y=0,g_cap_r1z=0,g_cap_r1rx=0,g_cap_r1ry=0,g_cap_r1rz=0,g_cap_r1d=0;
 double g_cap_prev_d=0;
+bool g_ref_ok=false; Vec3d g_ref_t(0,0,0);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
 int g_dbg_frame = 0;
@@ -1176,6 +1177,13 @@ int main(int argc, char** argv) {
                     // ============================================================
                     // 滤波处理：将当前位姿加入滤波器
                     // ============================================================
+                    // Zero-reference correction using ID1→ID0
+                    if(id1_found && g_ref_ok) {
+                        Mat R0r=rvecToMatrix(id0_rvec); Mat t1r=R0r.t()*(Mat(id1_tvec)-Mat(id0_tvec));
+                        t_rel.at<double>(0) -= (t1r.at<double>(0)-g_ref_t[0]);
+                        t_rel.at<double>(1) -= (t1r.at<double>(1)-g_ref_t[1]);
+                        t_rel.at<double>(2) -= (t1r.at<double>(2)-g_ref_t[2]);
+                    }
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
                         rel_rvec[0], rel_rvec[1], rel_rvec[2],
@@ -1359,6 +1367,7 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
+            if(key == 'z' && id1_found) { Mat R0r=rvecToMatrix(id0_rvec); Mat t1r=R0r.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_ref_t=Vec3d(t1r.at<double>(0),t1r.at<double>(1),t1r.at<double>(2)); g_ref_ok=true; cout<<"ZEROED"<<endl; }
             if ((key == 13 || key == 32) && ln < 100 && g_cap_ready) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
             lf << setw(2) << ln << " | "
