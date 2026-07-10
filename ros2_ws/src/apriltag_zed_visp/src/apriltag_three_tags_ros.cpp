@@ -1280,11 +1280,10 @@ int main(int argc, char** argv) {
 
                     // 显示坐标值
                     stringstream ss2;
-                    ss2 << "X=" << corr_x*1000
-                        << " Y=" << corr_y*1000
-                        << " Z=" << corr_z*1000 << " mm";
+                    ss2 << "XYZ=" << corr_x*1000 << " " << corr_y*1000 << " " << corr_z*1000
+                        << "mm  R=" << corr_rx*180/M_PI << " " << corr_ry*180/M_PI << " " << corr_rz*180/M_PI << "deg";
                     putText(frame_left, ss2.str(), Point(20, 55),
-                           FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
+                           FONT_HERSHEY_SIMPLEX, 0.45, Scalar(255, 255, 0), 2);
 
 
                     // ID1→ID0 reference (prominent)
@@ -1297,9 +1296,10 @@ int main(int argc, char** argv) {
                         putText(frame_left, ss3.str(), Point(20, 75),
                                FONT_HERSHEY_SIMPLEX, 0.65, clr, 2);
                         stringstream ss4;
-                        ss4 << "X=" << r1x*1000 << " Y=" << r1y*1000 << " Z=" << r1z*1000 << " mm";
+                        ss4 << "XYZ=" << r1x*1000 << " " << r1y*1000 << " " << r1z*1000
+                            << "mm  R=" << r1rx*180/M_PI << " " << r1ry*180/M_PI << " " << r1rz*180/M_PI << "deg";
                         putText(frame_left, ss4.str(), Point(20, 95),
-                               FONT_HERSHEY_SIMPLEX, 0.45, clr, 1);
+                               FONT_HERSHEY_SIMPLEX, 0.4, clr, 1);
                     }
                 }
             }
