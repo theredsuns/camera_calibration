@@ -1275,18 +1275,19 @@ int main(int argc, char** argv) {
                            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 0), 2);
 
 
-                    // 显示 ID1→ID0 参考信息
+                    // ID1→ID0 reference (prominent)
                     if (id1_found) {
+                        double err_mm = fabs(r1d - sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X))*1000;
+                        Scalar clr = err_mm<1.0 ? Scalar(0,255,0) : (err_mm<3.0 ? Scalar(0,255,255) : Scalar(0,0,255));
                         stringstream ss3;
                         ss3 << fixed << setprecision(1);
-                        ss3 << "ID1->ID0: " << r1d * 1000 << "mm (ref " << ID0_TO_ID1_X*1000 << "mm)";
-                        putText(frame_left, ss3.str(),
-                               Point(20, 75),
-                               FONT_HERSHEY_SIMPLEX, 0.5, Scalar(200, 200, 200), 1);
+                        ss3 << "ID1->ID0:" << r1d*1000 << "mm (" << err_mm << "mm err)";
+                        putText(frame_left, ss3.str(), Point(20, 75),
+                               FONT_HERSHEY_SIMPLEX, 0.65, clr, 2);
                         stringstream ss4;
-                        ss4 << "  X=" << r1x*1000 << " Y=" << r1y*1000 << " Z=" << r1z*1000 << " mm";
+                        ss4 << "X=" << r1x*1000 << " Y=" << r1y*1000 << " Z=" << r1z*1000 << " mm";
                         putText(frame_left, ss4.str(), Point(20, 95),
-                               FONT_HERSHEY_SIMPLEX, 0.4, Scalar(150, 150, 150), 1);
+                               FONT_HERSHEY_SIMPLEX, 0.45, clr, 1);
                     }
                 }
             }
