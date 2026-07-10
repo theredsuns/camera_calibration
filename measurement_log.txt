@@ -1,1 +1,2 @@
 N | ID2_X ID2_Y ID2_Z ID2_Rx ID2_Ry ID2_Rz ID2_D | ID1_X ID1_Y ID1_Z ID1_Rx ID1_Ry ID1_Rz ID1_D
+ 0 |   -55.3    98.9    30.0    1.8   -6.4   -0.8   117.2 |  -119.5    -3.5    -3.5   -2.7   -4.9    1.7   119.6

@@ -1189,6 +1189,13 @@ int main(int argc, char** argv) {
                     double cur_d = sqrt(t1r.at<double>(0)*t1r.at<double>(0)+t1r.at<double>(1)*t1r.at<double>(1)+t1r.at<double>(2)*t1r.at<double>(2));
                     if(fabs(cur_d-ref_d)/ref_d > 0.05) putText(frame_left, "OUT OF RANGE", Point(img_w/2-80,60), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 2);
                     }
+                    // Scale correction using ID1→ID0 as real-time reference
+                    if(g_bref_ok && id1_found) {
+                        Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec));
+                        double cur_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2));
+                        double sf = g_bref_d01 / cur_d01;
+                        if(sf>0.85 && sf<1.15) t_rel = t_rel * sf;
+                    }
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
                         rel_rvec[0], rel_rvec[1], rel_rvec[2],
@@ -1374,7 +1381,7 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
-            if(key=='b'&&id1_found&&g_cap_ready){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; }
+            if(key=='b'&&id1_found&&g_cap_ready){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; cout<<"REF SET d01="<<g_bref_d01*1000<<"mm d02="<<g_bref_d02*1000<<"mm"<<endl; }
             if(key == 'z' && id1_found) { Mat R0r=rvecToMatrix(id0_rvec); Mat t1r=R0r.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_ref_t=Vec3d(t1r.at<double>(0),t1r.at<double>(1),t1r.at<double>(2)); Mat R1r=rvecToMatrix(id1_rvec); g_ref_R=R0r.t()*R1r; g_ref_ok=true; cout<<"ZEROED"<<endl; }
             if ((key == 13 || key == 32) && ln < 100 && g_cap_ready) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
