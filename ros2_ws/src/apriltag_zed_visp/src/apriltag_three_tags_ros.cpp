@@ -1209,9 +1209,6 @@ int main(int argc, char** argv) {
                     // ============================================================
                     double corr_x = smooth_x, corr_y = smooth_y, corr_z = smooth_z;
                     double corr_rx = smooth_rx, corr_ry = smooth_ry, corr_rz = smooth_rz;
-                    g_cap_x=corr_x; g_cap_y=corr_y; g_cap_z=corr_z;
-                    g_cap_d=sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z);
-                    g_cap_rx=corr_rx; g_cap_ry=corr_ry; g_cap_rz=corr_rz;
                     if(id1_found){g_cap_r1x=r1x;g_cap_r1y=r1y;g_cap_r1z=r1z;g_cap_r1d=r1d;g_cap_ready=true;}
 
                     // 距离的额外强 EMA 平滑
