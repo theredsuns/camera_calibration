@@ -1282,6 +1282,15 @@ int main(int argc, char** argv) {
                 }
             }
 
+            // ZED depth vs PnP Z comparison
+            {
+                stringstream sd;
+                sd << fixed << setprecision(0);
+                sd << "Depth_Z: ID0=" << g_dbg_zedz0 << "mm ID2=" << g_dbg_zedz2 << "mm";
+                putText(frame_left, sd.str(), Point(20, 130),
+                       FONT_HERSHEY_SIMPLEX, 0.4, Scalar(0, 255, 255), 1);
+            }
+
             // 显示图像（无论是否检测到标签都显示）
             imshow("三标签基准系统 (ID0+ID1 -> ID2)", frame_left);
 
