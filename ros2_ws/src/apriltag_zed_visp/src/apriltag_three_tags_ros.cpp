@@ -980,7 +980,7 @@ int main(int argc, char** argv) {
                         double rerr=0;
                         for(int k=0;k<4;k++) rerr+=norm(corners[i][k]-proj[k]);
                         rerr/=4;
-                        if(rerr<1.5) { id2_rvec=rv; id2_tvec=tv; } // only accept if <1.5px
+                        if(rerr<1.5) { id2_rvec=rv; id2_tvec=tv; g_dbg_zedz2=0; } else { g_dbg_zedz2=-1; }
                     }
 
                     // 在图像上绘制 3D 坐标轴和标签名称
