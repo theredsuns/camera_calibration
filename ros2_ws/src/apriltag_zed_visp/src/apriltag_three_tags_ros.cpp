@@ -47,6 +47,7 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 double g_cap_x=0,g_cap_y=0,g_cap_z=0,g_cap_rx=0,g_cap_ry=0,g_cap_rz=0,g_cap_d=0,g_cap_r1x=0,g_cap_r1y=0,g_cap_r1z=0,g_cap_r1rx=0,g_cap_r1ry=0,g_cap_r1rz=0,g_cap_r1d=0;
 double g_cap_prev_d=0;
 bool g_bref_ok=false; double g_bref_d01=0, g_bref_d02=0;
+double g_dcam_mv=0, g_dcam_dd=0;
 bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
@@ -1389,7 +1390,7 @@ int main(int argc, char** argv) {
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
                << setw(6) << g_cap_rx*180/M_PI << " " << setw(6) << g_cap_ry*180/M_PI << " " << setw(6) << g_cap_rz*180/M_PI << " " << setw(7) << g_cap_d*1000 << " | "
                << setw(7) << g_cap_r1x*1000 << " " << setw(7) << g_cap_r1y*1000 << " " << setw(7) << g_cap_r1z*1000 << " "
-               << setw(6) << g_cap_r1rx*180/M_PI << " " << setw(6) << g_cap_r1ry*180/M_PI << " " << setw(6) << g_cap_r1rz*180/M_PI << " " << setw(7) << g_cap_r1d*1000 << endl;
+               << setw(6) << g_cap_r1rx*180/M_PI << " " << setw(6) << g_cap_r1ry*180/M_PI << " " << setw(6) << g_cap_r1rz*180/M_PI << " " << setw(7) << g_cap_r1d*1000  << " " << setw(5) << g_dcam_mv << " " << setw(5) << g_dcam_dd << endl;
                 g_cap_prev_d = g_cap_d;
                 ln++;
                 cout << "Captured " << ln << "/100  ID2=" << g_cap_d*1000 << "mm R=(" << g_cap_rx*180/M_PI << "," << g_cap_ry*180/M_PI << "," << g_cap_rz*180/M_PI << ")deg | ID1=" << g_cap_r1d*1000 << "mm" << endl;
