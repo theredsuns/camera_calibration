@@ -49,6 +49,7 @@ double g_cap_prev_d=0;
 bool g_bref_ok=false; double g_bref_d01=0, g_bref_d02=0;
 double g_dcam_mv=0, g_dcam_dd=0;
 double g_sf=1.0;
+double g_dcam_cur_d01=0;
 bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
@@ -1201,6 +1202,7 @@ int main(int argc, char** argv) {
                     double mv = fabs((cur_d01-g_bref_d01)*1000);
                         double sf = g_bref_d01 / cur_d01;
                         if(sf>0.85 && sf<1.15) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
+                    g_sf = sf; g_dcam_cur_d01 = cur_d01;
                     g_sf = sf;
                     }
                     relative_filter.add(
