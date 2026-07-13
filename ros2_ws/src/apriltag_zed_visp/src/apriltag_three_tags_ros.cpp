@@ -1383,7 +1383,7 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
-            if(key=='b'&&id1_found&&g_cap_ready){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; cout<<"REF SET d01="<<g_bref_d01*1000<<"mm d02="<<g_bref_d02*1000<<"mm"<<endl; }
+            if(key=='b'&&id1_found&&g_cap_ready){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; fprintf(stderr,"B_PRESSED d01=%.1f d02=%.1f\n",g_bref_d01*1000,g_bref_d02*1000); cout<<"REF SET d01="<<g_bref_d01*1000<<"mm d02="<<g_bref_d02*1000<<"mm"<<endl; }
             if(key == 'z' && id1_found) { Mat R0r=rvecToMatrix(id0_rvec); Mat t1r=R0r.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_ref_t=Vec3d(t1r.at<double>(0),t1r.at<double>(1),t1r.at<double>(2)); Mat R1r=rvecToMatrix(id1_rvec); g_ref_R=R0r.t()*R1r; g_ref_ok=true; cout<<"ZEROED"<<endl; }
             if ((key == 13 || key == 32) && ln < 100 && g_cap_ready) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
