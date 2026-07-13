@@ -54,7 +54,7 @@ double g_dcam_cur_d01=0;
 double g_raw_x=0,g_raw_y=0,g_raw_z=0;
 bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
-double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
+double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1, g_dbg_zedz1 = -1;
 int g_dbg_frame = 0;
 
 // 标定畸变系数全局变量
@@ -66,7 +66,7 @@ vector<double> g_calib_dist_coeffs;
 // ID0 与 ID1 之间的已知物理距离（单位：米）
 // 这是标定好的刚体上两个标签的固定相对位置
 // ============================================================
-double ID0_TO_ID1_X = 0;  // auto-calibrated from first 50 frames
+double ID0_TO_ID1_X = 0.120;  // auto-calibrated from first 50 frames
 double g_d01_sum=0; int g_d01_n=0; bool g_d01_ready=false;
 const double ID0_TO_ID1_Y = 0.000;   // Y 轴距离：0厘米（共面）
 const double ID0_TO_ID1_Z = 0.000;   // Z 轴距离：0厘米（共面）
@@ -1377,7 +1377,7 @@ int main(int argc, char** argv) {
             }
 
             // 显示图像（无论是否检测到标签都显示）
-            stringstream sd; sd<<fixed<<setprecision(1)<<"ViewAngle: ID0="<<g_dbg_zedz0<<" ID2="<<g_dbg_zedz2<<"deg"; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,255,255),1);
+            stringstream sd; sd<<fixed<<setprecision(0)<<"D0:"<<norm(id0_tvec)*1000<<"mm a:"<<g_dbg_zedz0<<" D1:"<<norm(id1_tvec)*1000<<"mm a:"<<g_dbg_zedz1<<" D2:"<<norm(id2_tvec)*1000<<"mm a:"<<g_dbg_zedz2; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.4,Scalar(0,255,255),1);
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
             if (id0_found && id1_found && id2_found) {
