@@ -50,6 +50,7 @@ bool g_bref_ok=false; double g_bref_d01=0, g_bref_d02=0;
 double g_dcam_mv=0, g_dcam_dd=0;
 double g_sf=1.0;
 double g_dcam_cur_d01=0;
+double g_raw_x=0,g_raw_y=0,g_raw_z=0;
 bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
@@ -1403,7 +1404,7 @@ int main(int argc, char** argv) {
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
                << setw(6) << g_cap_rx*180/M_PI << " " << setw(6) << g_cap_ry*180/M_PI << " " << setw(6) << g_cap_rz*180/M_PI << " " << setw(7) << g_cap_d*1000 << " | "
                << setw(7) << g_cap_r1x*1000 << " " << setw(7) << g_cap_r1y*1000 << " " << setw(7) << g_cap_r1z*1000 << " "
-               << setw(7) << g_cap_r1d*1000 << " ref:" << setw(6) << fixed << setprecision(1) << g_bref_d01*1000 << " cur:" << setw(6) << g_dcam_cur_d01*1000 << " sf:" << setw(6) << setprecision(4) << g_sf << " dCAM:" << setw(5) << g_dcam_mv << endl;
+               << setw(7) << g_cap_r1d*1000 << " raw:" << setw(6) << fixed << setprecision(1) << g_raw_x*1000 << " " << setw(6) << g_raw_y*1000 << " " << setw(6) << g_raw_z*1000 << " corr:" << setw(6) << g_cap_x*1000 << " " << setw(6) << g_cap_y*1000 << " " << setw(6) << g_cap_z*1000 << " ref01:" << setw(6) << g_bref_d01*1000 << " cur01:" << setw(6) << g_dcam_cur_d01*1000 << " sf:" << setw(6) << setprecision(4) << g_sf << " dCAM:" << setw(5) << g_dcam_mv << endl;
                 g_cap_prev_d = g_cap_d;
                 ln++;
                 cout << "Captured " << ln << "/100  ID2=" << g_cap_d*1000 << "mm R=(" << g_cap_rx*180/M_PI << "," << g_cap_ry*180/M_PI << "," << g_cap_rz*180/M_PI << ")deg | ID1=" << g_cap_r1d*1000 << "mm" << endl;
