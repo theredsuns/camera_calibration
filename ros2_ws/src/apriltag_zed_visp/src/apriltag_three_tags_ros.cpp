@@ -986,7 +986,7 @@ int main(int argc, char** argv) {
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
                     else if (ids[i]==BASE_TAG_ID_1) g_dbg_zedz1=rd;
                     else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; id2_rvec = rv; id2_tvec = tv; }
-                        double cth = fabs(R_tag.at<double>(2,2)); double ang = acos(cth)*180/M_PI;
+                        double ang = acos(fabs(R_tag.at<double>(2,2)))*180/M_PI;
                         if(ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=ang;
                         else if(ids[i]==BASE_TAG_ID_1) g_dbg_zedz1=ang;
                         else g_dbg_zedz2=ang;
