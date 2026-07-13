@@ -1203,7 +1203,6 @@ int main(int argc, char** argv) {
                         double sf = g_bref_d01 / cur_d01;
                         if(sf>0.85 && sf<1.15) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
                     g_sf = sf; g_dcam_cur_d01 = cur_d01;
-                    g_sf = sf;
                     }
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
@@ -1404,7 +1403,7 @@ int main(int argc, char** argv) {
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
                << setw(6) << g_cap_rx*180/M_PI << " " << setw(6) << g_cap_ry*180/M_PI << " " << setw(6) << g_cap_rz*180/M_PI << " " << setw(7) << g_cap_d*1000 << " | "
                << setw(7) << g_cap_r1x*1000 << " " << setw(7) << g_cap_r1y*1000 << " " << setw(7) << g_cap_r1z*1000 << " "
-               << setw(6) << g_cap_r1rx*180/M_PI << " " << setw(6) << g_cap_r1ry*180/M_PI << " " << setw(6) << g_cap_r1rz*180/M_PI << " " << setw(7) << g_cap_r1d*1000  << " " << setw(5) << g_dcam_mv << " " << setw(5) << g_dcam_dd << " " << setw(6) << fixed << setprecision(4) << g_sf << endl;
+               << setw(7) << g_cap_r1d*1000 << " ref:" << setw(6) << fixed << setprecision(1) << g_bref_d01*1000 << " cur:" << setw(6) << g_dcam_cur_d01*1000 << " sf:" << setw(6) << setprecision(4) << g_sf << " dCAM:" << setw(5) << g_dcam_mv << endl;
                 g_cap_prev_d = g_cap_d;
                 ln++;
                 cout << "Captured " << ln << "/100  ID2=" << g_cap_d*1000 << "mm R=(" << g_cap_rx*180/M_PI << "," << g_cap_ry*180/M_PI << "," << g_cap_rz*180/M_PI << ")deg | ID1=" << g_cap_r1d*1000 << "mm" << endl;
