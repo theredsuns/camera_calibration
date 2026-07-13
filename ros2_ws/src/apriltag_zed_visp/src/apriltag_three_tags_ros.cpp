@@ -1382,7 +1382,7 @@ int main(int argc, char** argv) {
                       && p2.x>rx&&p2.x<rx+rw&&p2.y>ry&&p2.y<ry+rh;
             }
             cv::putText(frame_left, in_roi?"VALID (20-80cm)":"OUT OF RANGE", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
-            if(!g_bref_ok && id1_found){ Mat R0i=rvecToMatrix(id0_rvec); Mat t1i=R0i.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1i.at<double>(0)*t1i.at<double>(0)+t1i.at<double>(1)*t1i.at<double>(1)+t1i.at<double>(2)*t1i.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; }
+            if(!g_bref_ok && id1_found && relative_filter.isStable()){ Mat R0i=rvecToMatrix(id0_rvec); Mat t1i=R0i.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1i.at<double>(0)*t1i.at<double>(0)+t1i.at<double>(1)*t1i.at<double>(1)+t1i.at<double>(2)*t1i.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; }
             if(!g_bref_ok) putText(frame_left,"Press B to set reference",Point(img_w/2-110,img_h-30),FONT_HERSHEY_SIMPLEX,0.6,Scalar(0,255,255),2);
             else { double mv=0,dd=0; if(id1_found){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); double d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); mv=fabs((d01-g_bref_d01)*1000); g_dcam_mv=mv; } dd=fabs((g_cap_d-g_bref_d02)*1000); stringstream sb; sb<<fixed<<setprecision(1)<<"dCAM:"<<mv<<"mm dID2:"<<dd<<"mm"; Scalar cl=id1_found?(mv<2?Scalar(0,255,0):Scalar(0,0,255)):Scalar(0,200,200); putText(frame_left,sb.str(),Point(img_w-230,50),FONT_HERSHEY_SIMPLEX,0.45,cl,2); }
             zed.getSensorsData(imu_data, sl::TIME_REFERENCE::CURRENT);
