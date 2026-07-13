@@ -1377,7 +1377,16 @@ int main(int argc, char** argv) {
             }
 
             // 显示图像（无论是否检测到标签都显示）
-            stringstream sd; sd<<fixed<<setprecision(0)<<"D0:"<<norm(id0_tvec)*1000<<"mm a:"<<g_dbg_zedz0<<" D1:"<<norm(id1_tvec)*1000<<"mm a:"<<g_dbg_zedz1<<" D2:"<<norm(id2_tvec)*1000<<"mm a:"<<g_dbg_zedz2; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.4,Scalar(0,255,255),1);
+            // Camera-frame XYZ + angles for each tag (big font, bottom-left)
+            int ly = img_h - 85;
+            auto show_pose = [&](int tid, Vec3d& tv, Vec3d& rv, Scalar clr) {
+                stringstream ss; ss<<fixed<<setprecision(1)<<"ID"<<tid<<": XYZ="<<tv[0]*1000<<" "<<tv[1]*1000<<" "<<tv[2]*1000
+                    <<"mm R="<<rv[0]*180/M_PI<<" "<<rv[1]*180/M_PI<<" "<<rv[2]*180/M_PI<<"deg";
+                putText(frame_left, ss.str(), Point(20, ly), FONT_HERSHEY_SIMPLEX, 0.55, clr, 2); ly+=22;
+            };
+            if(id0_found) show_pose(0, id0_tvec, id0_rvec, Scalar(0,255,0));
+            if(id1_found) show_pose(1, id1_tvec, id1_rvec, Scalar(255,0,255));
+            if(id2_found) show_pose(2, id2_tvec, id2_rvec, Scalar(0,255,255));
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
             if (id0_found && id1_found && id2_found) {
