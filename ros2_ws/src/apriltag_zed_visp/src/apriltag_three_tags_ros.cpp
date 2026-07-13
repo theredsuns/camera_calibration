@@ -1197,6 +1197,7 @@ int main(int argc, char** argv) {
                     if(fabs(cur_d-ref_d)/ref_d > 0.05) putText(frame_left, "OUT OF RANGE", Point(img_w/2-80,60), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 2);
                     }
                     // Scale correction using ID1→ID0 as real-time reference
+                    g_raw_x = t_rel.at<double>(0); g_raw_y = t_rel.at<double>(1); g_raw_z = t_rel.at<double>(2);
                     if(g_bref_ok && id1_found) {
                         Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec));
                         double cur_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2));
@@ -1205,7 +1206,6 @@ int main(int argc, char** argv) {
                         if(sf>0.85 && sf<1.15) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
                     g_sf = sf; g_dcam_cur_d01 = cur_d01;
                     }
-                    g_raw_x = t_rel.at<double>(0); g_raw_y = t_rel.at<double>(1); g_raw_z = t_rel.at<double>(2);
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
                         rel_rvec[0], rel_rvec[1], rel_rvec[2],
