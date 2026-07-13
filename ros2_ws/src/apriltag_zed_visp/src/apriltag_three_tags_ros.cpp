@@ -1197,15 +1197,22 @@ int main(int argc, char** argv) {
                     double cur_d = sqrt(t1r.at<double>(0)*t1r.at<double>(0)+t1r.at<double>(1)*t1r.at<double>(1)+t1r.at<double>(2)*t1r.at<double>(2));
                     if(fabs(cur_d-ref_d)/ref_d > 0.05) putText(frame_left, "OUT OF RANGE", Point(img_w/2-80,60), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 2);
                     }
-                    // Scale correction using ID1→ID0 as real-time reference
+                    // Viewpoint offset correction using ID1→ID0 motion detection
                     g_raw_x = t_rel.at<double>(0); g_raw_y = t_rel.at<double>(1); g_raw_z = t_rel.at<double>(2);
                     if(g_bref_ok && id1_found) {
                         Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec));
                         double cur_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2));
-                    double mv = fabs((cur_d01-g_bref_d01)*1000);
-                        double sf = g_bref_d01 / cur_d01;
-                        if(sf>0.75 && sf<1.25) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
-                    g_sf = sf; g_dcam_cur_d01 = cur_d01;
+                        double mv = fabs((cur_d01-g_bref_d01)*1000);
+                        g_dcam_mv = mv; g_dcam_cur_d01 = cur_d01; g_sf = 1.0;
+                        if(mv > 1.5) { // Camera moved → apply offset correction
+                            static Vec3d vp_err(0,0,0); static bool vp_ok=false;
+                            Vec3d cur_rel(t_rel.at<double>(0),t_rel.at<double>(1),t_rel.at<double>(2));
+                            Vec3d ref_rel(g_bref_d02_ref_x,g_bref_d02_ref_y,g_bref_d02_ref_z);
+                            if(!vp_ok){ vp_err = cur_rel - ref_rel; vp_ok=true; }
+                            t_rel.at<double>(0) -= vp_err[0];
+                            t_rel.at<double>(1) -= vp_err[1];
+                            t_rel.at<double>(2) -= vp_err[2];
+                        }
                     }
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
