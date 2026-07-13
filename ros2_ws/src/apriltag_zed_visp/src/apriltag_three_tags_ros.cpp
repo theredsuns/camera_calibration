@@ -1398,6 +1398,8 @@ int main(int argc, char** argv) {
                     <<"mm dR="<<dr[0]*180/M_PI<<" "<<dr[1]*180/M_PI<<" "<<dr[2]*180/M_PI<<"deg";
                 putText(frame_left, sd.str(), Point(20, ly+5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,0), 2);
             }
+            stringstream spx; spx<<fixed<<setprecision(0)<<"Size:ID0="<<g_dbg_zedz0<<" ID1="<<g_dbg_zedz1<<" ID2="<<g_dbg_zedz2<<"px";
+            putText(frame_left,spx.str(),Point(20,ly+25),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
             if (id0_found && id1_found && id2_found) {
