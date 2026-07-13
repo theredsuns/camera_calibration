@@ -1359,7 +1359,7 @@ int main(int argc, char** argv) {
             }
 
             // 显示图像（无论是否检测到标签都显示）
-            stringstream sd; sd<<fixed<<setprecision(0)<<"Depth: ID0="<<g_dbg_zedz0<<" ID2="<<g_dbg_zedz2<<"mm"; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,255,255),1);
+            stringstream sd; sd<<fixed<<setprecision(1)<<"ViewAngle: ID0="<<g_dbg_zedz0<<" ID2="<<g_dbg_zedz2<<"deg"; putText(frame_left,sd.str(),Point(20,130),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,255,255),1);
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
             if (id0_found && id1_found && id2_found) {
