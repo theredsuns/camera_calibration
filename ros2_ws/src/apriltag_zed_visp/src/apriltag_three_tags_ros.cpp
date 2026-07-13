@@ -987,6 +987,8 @@ int main(int argc, char** argv) {
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
                     else if (ids[i]==BASE_TAG_ID_1) g_dbg_zedz1=rd;
                     else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; id2_rvec = rv; id2_tvec = tv; }
+                    double sl = (norm(corners[i][0]-corners[i][1])+norm(corners[i][1]-corners[i][2])+norm(corners[i][2]-corners[i][3])+norm(corners[i][3]-corners[i][0]))/4.0;
+                    if(ids[i]==BASE_TAG_ID_0) g_px0=sl; else if(ids[i]==BASE_TAG_ID_1) g_px1=sl; else g_px2=sl;
                         double ang = acos(fabs(R_tag.at<double>(2,2)))*180/M_PI;
                         if(ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=ang;
                         else if(ids[i]==BASE_TAG_ID_1) g_dbg_zedz1=ang;
