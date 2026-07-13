@@ -980,6 +980,7 @@ int main(int argc, char** argv) {
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=rd;
                     else { id2_rvec = rv; id2_tvec = tv; }
+                        double cth2 = fabs(R_tag.at<double>(2,2)); g_dbg_zedz2 = acos(cth2)*180/M_PI;
 
                     // 在图像上绘制 3D 坐标轴和标签名称
                     aruco::drawAxis(frame_left, camera_matrix, dist_coeffs, rv, tv, tag_sz * 0.5);
