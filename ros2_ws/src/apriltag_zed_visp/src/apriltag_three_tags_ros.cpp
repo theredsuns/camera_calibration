@@ -666,6 +666,7 @@ int main(int argc, char** argv) {
     init_params.camera_resolution = sl::RESOLUTION::HD720;  // 分辨率：1280x720
     init_params.depth_mode = sl::DEPTH_MODE::PERFORMANCE;   // 深度模式：性能优先
     init_params.camera_fps = 30;                             // 帧率：30fps
+    init_params.sensors_required = true;
 
     // 打开 ZED 相机
     sl::ERROR_CODE err = zed.open(init_params);
@@ -867,6 +868,7 @@ int main(int argc, char** argv) {
     ofstream lf("/home/nkk/coordate_change/measurement_log.txt");
         lf<<"N | ID2_X ID2_Y ID2_Z ID2_Rx ID2_Ry ID2_Rz ID2_D | ID1_X ID1_Y ID1_Z ID1_Rx ID1_Ry ID1_Rz ID1_D"<<endl;
     int ln=0;
+    sl::SensorsData imu_data;
     while (rclcpp::ok()) {
         // 采集一帧图像（阻塞式，等待新帧）
         if (zed.grab() == sl::ERROR_CODE::SUCCESS) {
