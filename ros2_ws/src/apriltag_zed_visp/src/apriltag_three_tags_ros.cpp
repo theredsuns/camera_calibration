@@ -1204,11 +1204,13 @@ int main(int argc, char** argv) {
                         double cur_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2));
                         double mv = fabs((cur_d01-g_bref_d01)*1000);
                         g_dcam_mv = mv; g_dcam_cur_d01 = cur_d01; g_sf = 1.0;
-                        if(mv > 1.5) { // Camera moved → apply offset correction
+                        if(mv > 1.5) { // Camera moved → compute current viewpoint offset
                             static Vec3d vp_err(0,0,0); static bool vp_ok=false;
+                            static double last_mv=0;
                             Vec3d cur_rel(t_rel.at<double>(0),t_rel.at<double>(1),t_rel.at<double>(2));
                             Vec3d ref_rel(g_bref_d02_ref_x,g_bref_d02_ref_y,g_bref_d02_ref_z);
-                            if(!vp_ok){ vp_err = cur_rel - ref_rel; vp_ok=true; }
+                            // Update vp_err when camera first moves or settles at new position
+                            if(!vp_ok || fabs(mv-last_mv)>2.0){ vp_err = cur_rel - ref_rel; vp_ok=true; last_mv=mv; }
                             t_rel.at<double>(0) -= vp_err[0];
                             t_rel.at<double>(1) -= vp_err[1];
                             t_rel.at<double>(2) -= vp_err[2];
