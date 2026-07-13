@@ -1203,7 +1203,7 @@ int main(int argc, char** argv) {
                         double cur_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2));
                     double mv = fabs((cur_d01-g_bref_d01)*1000);
                         double sf = g_bref_d01 / cur_d01;
-                        if(sf>0.85 && sf<1.15) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
+                        if(sf>0.75 && sf<1.25) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
                     g_sf = sf; g_dcam_cur_d01 = cur_d01;
                     }
                     relative_filter.add(
