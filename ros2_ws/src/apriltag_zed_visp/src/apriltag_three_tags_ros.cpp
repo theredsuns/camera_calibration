@@ -55,6 +55,7 @@ double g_raw_x=0,g_raw_y=0,g_raw_z=0;
 bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1, g_dbg_zedz1 = -1;
+double g_px0=0, g_px1=0, g_px2=0;
 int g_dbg_frame = 0;
 
 // 标定畸变系数全局变量
@@ -1398,7 +1399,7 @@ int main(int argc, char** argv) {
                     <<"mm dR="<<dr[0]*180/M_PI<<" "<<dr[1]*180/M_PI<<" "<<dr[2]*180/M_PI<<"deg";
                 putText(frame_left, sd.str(), Point(20, ly+5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,0), 2);
             }
-            stringstream spx; spx<<fixed<<setprecision(0)<<"Size:ID0="<<g_dbg_zedz0<<" ID1="<<g_dbg_zedz1<<" ID2="<<g_dbg_zedz2<<"px";
+            stringstream spx; spx<<fixed<<setprecision(0)<<"Size:ID0="<<g_px0<<" ID1="<<g_px1<<" ID2="<<g_px2<<"px";
             putText(frame_left,spx.str(),Point(20, img_h/2),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
