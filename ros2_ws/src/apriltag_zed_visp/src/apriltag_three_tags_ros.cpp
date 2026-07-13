@@ -48,6 +48,7 @@ double g_cap_x=0,g_cap_y=0,g_cap_z=0,g_cap_rx=0,g_cap_ry=0,g_cap_rz=0,g_cap_d=0,
 double g_cap_prev_d=0;
 bool g_bref_ok=false; double g_bref_d01=0, g_bref_d02=0;
 double g_dcam_mv=0, g_dcam_dd=0;
+double g_sf=1.0;
 bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1;
@@ -1200,6 +1201,8 @@ int main(int argc, char** argv) {
                     double mv = fabs((cur_d01-g_bref_d01)*1000);
                         double sf = g_bref_d01 / cur_d01;
                         if(sf>0.85 && sf<1.15) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
+                    g_sf = sf;
+                g_sf = sf;
                     }
                     relative_filter.add(
                         t_rel.at<double>(0, 0), t_rel.at<double>(1, 0), t_rel.at<double>(2, 0),
@@ -1381,7 +1384,7 @@ int main(int argc, char** argv) {
             }
             cv::putText(frame_left, in_roi?"VALID (20-80cm)":"OUT OF RANGE", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
             if(!g_bref_ok) putText(frame_left,"Press B to set reference",Point(img_w/2-110,img_h-30),FONT_HERSHEY_SIMPLEX,0.6,Scalar(0,255,255),2);
-            else { double mv=0,dd=0; if(id1_found){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); double d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); mv=fabs((d01-g_bref_d01)*1000); } dd=fabs((g_cap_d-g_bref_d02)*1000); stringstream sb; sb<<fixed<<setprecision(1)<<"dCAM:"<<mv<<"mm dID2:"<<dd<<"mm"; Scalar cl=id1_found?(mv<2?Scalar(0,255,0):Scalar(0,0,255)):Scalar(0,200,200); putText(frame_left,sb.str(),Point(img_w-230,50),FONT_HERSHEY_SIMPLEX,0.45,cl,2); }
+            else { double mv=0,dd=0; if(id1_found){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); double d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); mv=fabs((d01-g_bref_d01)*1000); g_dcam_mv=mv; } dd=fabs((g_cap_d-g_bref_d02)*1000); stringstream sb; sb<<fixed<<setprecision(1)<<"dCAM:"<<mv<<"mm dID2:"<<dd<<"mm"; Scalar cl=id1_found?(mv<2?Scalar(0,255,0):Scalar(0,0,255)):Scalar(0,200,200); putText(frame_left,sb.str(),Point(img_w-230,50),FONT_HERSHEY_SIMPLEX,0.45,cl,2); }
             zed.getSensorsData(imu_data, sl::TIME_REFERENCE::CURRENT);
             auto a=imu_data.imu.linear_acceleration; auto g=imu_data.imu.angular_velocity;
             double acc=sqrt(a.x*a.x+a.y*a.y+a.z*a.z), gyr=sqrt(g.x*g.x+g.y*g.y+g.z*g.z);
