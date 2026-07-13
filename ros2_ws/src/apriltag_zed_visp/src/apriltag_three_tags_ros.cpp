@@ -1390,6 +1390,14 @@ int main(int argc, char** argv) {
             if(id0_found) show_pose(0, id0_tvec, id0_rvec, Scalar(0,255,0));
             if(id1_found) show_pose(1, id1_tvec, id1_rvec, Scalar(255,0,255));
             if(id2_found) show_pose(2, id2_tvec, id2_rvec, Scalar(0,255,255));
+            // Direct camera-frame ID2→ID0 relative (no rotation, simple subtraction)
+            if(id0_found && id2_found) {
+                Vec3d dc = id2_tvec - id0_tvec;
+                Vec3d dr = id2_rvec - id0_rvec;
+                stringstream sd; sd<<fixed<<setprecision(1)<<"dCAM: ID2-ID0="<<dc[0]*1000<<" "<<dc[1]*1000<<" "<<dc[2]*1000
+                    <<"mm dR="<<dr[0]*180/M_PI<<" "<<dr[1]*180/M_PI<<" "<<dr[2]*180/M_PI<<"deg";
+                putText(frame_left, sd.str(), Point(20, ly+5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,0), 2);
+            }
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
             if (id0_found && id1_found && id2_found) {
