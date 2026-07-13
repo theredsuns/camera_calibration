@@ -1195,6 +1195,7 @@ int main(int argc, char** argv) {
                     if(g_bref_ok && id1_found) {
                         Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec));
                         double cur_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2));
+                    double mv = fabs((cur_d01-g_bref_d01)*1000);
                         double sf = g_bref_d01 / cur_d01;
                         if(sf>0.85 && sf<1.15) { t_rel = t_rel * sf; static int dbg=0; if(++dbg%30==0) fprintf(stderr,"SCALE: sf=%.4f cur=%.1f ref=%.1f\n",sf,cur_d01*1000,g_bref_d01*1000); }
                     }
