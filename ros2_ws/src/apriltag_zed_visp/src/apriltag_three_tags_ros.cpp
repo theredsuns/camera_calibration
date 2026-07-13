@@ -47,6 +47,7 @@ const string TOPIC_NAME = "Trace5_zed_relative";  // 发布话题名称
 double g_cap_x=0,g_cap_y=0,g_cap_z=0,g_cap_rx=0,g_cap_ry=0,g_cap_rz=0,g_cap_d=0,g_cap_r1x=0,g_cap_r1y=0,g_cap_r1z=0,g_cap_r1rx=0,g_cap_r1ry=0,g_cap_r1rz=0,g_cap_r1d=0;
 double g_cap_prev_d=0;
 bool g_bref_ok=false; double g_bref_d01=0, g_bref_d02=0;
+double g_bref_d02_ref_x=0, g_bref_d02_ref_y=0, g_bref_d02_ref_z=0;
 double g_dcam_mv=0, g_dcam_dd=0;
 double g_sf=1.0;
 double g_dcam_cur_d01=0;
@@ -1385,7 +1386,7 @@ int main(int argc, char** argv) {
                       && p2.x>rx&&p2.x<rx+rw&&p2.y>ry&&p2.y<ry+rh;
             }
             cv::putText(frame_left, in_roi?"VALID (20-80cm)":"OUT OF RANGE", Point(rx+5,ry+20), FONT_HERSHEY_SIMPLEX, 0.7, in_roi?Scalar(0,255,0):Scalar(0,0,255), 2);
-            if(!g_bref_ok){ Mat R0i=rvecToMatrix(id0_rvec); Mat t1i=R0i.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1i.at<double>(0)*t1i.at<double>(0)+t1i.at<double>(1)*t1i.at<double>(1)+t1i.at<double>(2)*t1i.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; }
+            if(!g_bref_ok){ Mat R0i=rvecToMatrix(id0_rvec); Mat t1i=R0i.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1i.at<double>(0)*t1i.at<double>(0)+t1i.at<double>(1)*t1i.at<double>(1)+t1i.at<double>(2)*t1i.at<double>(2)); g_bref_d02=g_cap_d; g_bref_d02_ref_x=g_cap_x; g_bref_d02_ref_y=g_cap_y; g_bref_d02_ref_z=g_cap_z; g_bref_ok=true; }
             if(!g_bref_ok) putText(frame_left,"Press B to set reference",Point(img_w/2-110,img_h-30),FONT_HERSHEY_SIMPLEX,0.6,Scalar(0,255,255),2);
             else { double mv=0,dd=0; if(id1_found){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); double d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); mv=fabs((d01-g_bref_d01)*1000); g_dcam_mv=mv; } dd=fabs((g_cap_d-g_bref_d02)*1000); stringstream sb; sb<<fixed<<setprecision(1)<<"dCAM:"<<mv<<"mm dID2:"<<dd<<"mm"; Scalar cl=id1_found?(mv<2?Scalar(0,255,0):Scalar(0,0,255)):Scalar(0,200,200); putText(frame_left,sb.str(),Point(img_w-230,50),FONT_HERSHEY_SIMPLEX,0.45,cl,2); }
             zed.getSensorsData(imu_data, sl::TIME_REFERENCE::CURRENT);
@@ -1397,7 +1398,7 @@ int main(int argc, char** argv) {
 
             // 按 ESC 键退出
             char key = waitKey(10);
-            if(key=='b'&&id1_found&&g_cap_ready){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); g_bref_d02=g_cap_d; g_bref_ok=true; fprintf(stderr,"B_PRESSED d01=%.1f d02=%.1f\n",g_bref_d01*1000,g_bref_d02*1000); cout<<"REF SET d01="<<g_bref_d01*1000<<"mm d02="<<g_bref_d02*1000<<"mm"<<endl; }
+            if(key=='b'&&id1_found&&g_cap_ready){ Mat R0b=rvecToMatrix(id0_rvec); Mat t1b=R0b.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_bref_d01=sqrt(t1b.at<double>(0)*t1b.at<double>(0)+t1b.at<double>(1)*t1b.at<double>(1)+t1b.at<double>(2)*t1b.at<double>(2)); g_bref_d02=g_cap_d; g_bref_d02_ref_x=g_cap_x; g_bref_d02_ref_y=g_cap_y; g_bref_d02_ref_z=g_cap_z; g_bref_ok=true; fprintf(stderr,"B_PRESSED d01=%.1f d02=%.1f\n",g_bref_d01*1000,g_bref_d02*1000); cout<<"REF SET d01="<<g_bref_d01*1000<<"mm d02="<<g_bref_d02*1000<<"mm"<<endl; }
             if(key == 'z' && id1_found) { Mat R0r=rvecToMatrix(id0_rvec); Mat t1r=R0r.t()*(Mat(id1_tvec)-Mat(id0_tvec)); g_ref_t=Vec3d(t1r.at<double>(0),t1r.at<double>(1),t1r.at<double>(2)); Mat R1r=rvecToMatrix(id1_rvec); g_ref_R=R0r.t()*R1r; g_ref_ok=true; cout<<"ZEROED"<<endl; }
             if ((key == 13 || key == 32) && ln < 100 && g_cap_ready) {
                 double dd = fabs(g_cap_d - g_cap_r1d);
