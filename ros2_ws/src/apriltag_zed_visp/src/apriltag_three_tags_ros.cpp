@@ -1054,7 +1054,7 @@ int main(int argc, char** argv) {
                     Mat R_id2 = rvecToMatrix(id2_rvec);
                     
                     // 如果检测到 ID1，平均 ID0 和 ID1 的旋转（同刚体，噪声抵消）
-                    if (id1_found) {
+                    if (0) { // DISABLED rotation averaging
                         Vec3d rv_avg = (id0_rvec + id1_rvec) * 0.5;
                         R_id0 = rvecToMatrix(rv_avg);  // 使用平均旋转作为参考
                     }
