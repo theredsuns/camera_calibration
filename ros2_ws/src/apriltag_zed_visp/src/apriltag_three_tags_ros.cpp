@@ -1405,7 +1405,7 @@ int main(int argc, char** argv) {
                << setw(7) << fixed << setprecision(1) << g_cap_x*1000 << " " << setw(7) << g_cap_y*1000 << " " << setw(7) << g_cap_z*1000 << " "
                << setw(6) << g_cap_rx*180/M_PI << " " << setw(6) << g_cap_ry*180/M_PI << " " << setw(6) << g_cap_rz*180/M_PI << " " << setw(7) << g_cap_d*1000 << " | "
                << setw(7) << g_cap_r1x*1000 << " " << setw(7) << g_cap_r1y*1000 << " " << setw(7) << g_cap_r1z*1000 << " "
-               << setw(7) << g_cap_r1d*1000 << " raw:" << setw(6) << fixed << setprecision(1) << g_raw_x*1000 << " " << setw(6) << g_raw_y*1000 << " " << setw(6) << g_raw_z*1000 << " corr:" << setw(6) << g_cap_x*1000 << " " << setw(6) << g_cap_y*1000 << " " << setw(6) << g_cap_z*1000 << " ref01:" << setw(6) << g_bref_d01*1000 << " cur01:" << setw(6) << g_dcam_cur_d01*1000 << " sf:" << setw(6) << setprecision(4) << g_sf << " dCAM:" << setw(5) << g_dcam_mv << endl;
+               << setw(7) << fixed << setprecision(1) << g_cap_r1d*1000 << " | ref01:" << setw(6) << g_bref_d01*1000 << " cur01:" << setw(6) << g_dcam_cur_d01*1000 << " sf:" << setw(6) << setprecision(4) << g_sf << " dCAM:" << setw(5) << setprecision(1) << g_dcam_mv << endl;
                 g_cap_prev_d = g_cap_d;
                 ln++;
                 cout << "Captured " << ln << "/100  ID2=" << g_cap_d*1000 << "mm R=(" << g_cap_rx*180/M_PI << "," << g_cap_ry*180/M_PI << "," << g_cap_rz*180/M_PI << ")deg | ID1=" << g_cap_r1d*1000 << "mm" << endl;
