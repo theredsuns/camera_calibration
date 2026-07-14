@@ -57,6 +57,7 @@ bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1, g_dbg_zedz1 = -1;
 double g_px0=0, g_px1=0, g_px2=0;
 double g_dz0=-1, g_dz1=-1, g_dz2=-1;
+double g_dx0=0,g_dy0=0,g_dx2=0,g_dy2=0;
 int g_dbg_frame = 0;
 
 // 标定畸变系数全局变量
@@ -994,6 +995,7 @@ int main(int argc, char** argv) {
                     float dz=-1; int px=(int)ctr.x, py=(int)ctr.y;
                     if(px>=0&&px<depth_undist.cols&&py>=0&&py<depth_undist.rows) dz=depth_undist.at<float>(py,px);
                     if(ids[i]==BASE_TAG_ID_0)g_dz0=dz; else if(ids[i]==BASE_TAG_ID_1)g_dz1=dz; else g_dz2=dz;
+                    if(dz>0){ double X=(ctr.x-camera_matrix.at<double>(0,2))*dz/camera_matrix.at<double>(0,0); double Y=(ctr.y-camera_matrix.at<double>(1,2))*dz/camera_matrix.at<double>(1,1); if(ids[i]==BASE_TAG_ID_0){g_dx0=X;g_dy0=Y;} else if(ids[i]==TARGET_TAG_ID){g_dx2=X;g_dy2=Y;} }
                         double ang = acos(fabs(R_tag.at<double>(2,2)))*180/M_PI;
                         if(ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=ang;
                         else if(ids[i]==BASE_TAG_ID_1) g_dbg_zedz1=ang;
@@ -1406,6 +1408,8 @@ int main(int argc, char** argv) {
                     <<"mm dR="<<dr[0]*180/M_PI<<" "<<dr[1]*180/M_PI<<" "<<dr[2]*180/M_PI<<"deg";
                 putText(frame_left, sd.str(), Point(20, ly+5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,0), 2);
             }
+            // Depth-based camera-frame ID2→ID0
+            if(g_dz0>0 && g_dz2>0){ double ddx=g_dx2-g_dx0, ddy=g_dy2-g_dy0, ddz=g_dz2-g_dz0; double dd=sqrt(ddx*ddx+ddy*ddy+ddz*ddz); stringstream sdp; sdp<<fixed<<setprecision(1)<<"dDEP: ID2-ID0="<<ddx<<" "<<ddy<<" "<<ddz<<"mm D="<<dd<<"mm"; putText(frame_left,sdp.str(),Point(20,ly+45),FONT_HERSHEY_SIMPLEX,0.5,Scalar(0,255,255),2); }
             stringstream spx; spx<<fixed<<setprecision(0)<<"px:ID0="<<g_px0<<" ID1="<<g_px1<<" ID2="<<g_px2<<"  dZ:ID0="<<g_dz0<<" ID1="<<g_dz1<<" ID2="<<g_dz2<<"mm";
             putText(frame_left,spx.str(),Point(20, img_h/2),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
             // Check if all 3 tag centers are in ROI
