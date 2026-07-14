@@ -1409,7 +1409,7 @@ int main(int argc, char** argv) {
                 putText(frame_left, sd.str(), Point(20, ly+5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,0), 2);
             }
             // Depth-based camera-frame ID2→ID0
-            if(g_dz0>0 && g_dz2>0){ double ddx=g_dx2-g_dx0, ddy=g_dy2-g_dy0, ddz=g_dz2-g_dz0; double dd=sqrt(ddx*ddx+ddy*ddy+ddz*ddz); stringstream sdp; sdp<<fixed<<setprecision(1)<<"dDEP: ID2-ID0="<<ddx<<" "<<ddy<<" "<<ddz<<"mm D="<<dd<<"mm"; putText(frame_left,sdp.str(),Point(20,ly+45),FONT_HERSHEY_SIMPLEX,0.5,Scalar(0,255,255),2); }
+            if(g_dz0>0 && g_dz2>0){ double ddx=g_dx2-g_dx0, ddy=g_dy2-g_dy0, ddz=g_dz2-g_dz0; double dd=sqrt(ddx*ddx+ddy*ddy+ddz*ddz); stringstream sdp; sdp<<fixed<<setprecision(1)<<"dDEP: ID2-ID0="<<ddx<<" "<<ddy<<" "<<ddz<<"mm D="<<dd<<"mm"; putText(frame_left,sdp.str(),Point(20, img_h/2+80),FONT_HERSHEY_SIMPLEX,0.5,Scalar(0,255,255),2); }
             stringstream spx; spx<<fixed<<setprecision(0)<<"px:ID0="<<g_px0<<" ID1="<<g_px1<<" ID2="<<g_px2<<"  dZ:ID0="<<g_dz0<<" ID1="<<g_dz1<<" ID2="<<g_dz2<<"mm";
             putText(frame_left,spx.str(),Point(20, img_h/2),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
             // Check if all 3 tag centers are in ROI
