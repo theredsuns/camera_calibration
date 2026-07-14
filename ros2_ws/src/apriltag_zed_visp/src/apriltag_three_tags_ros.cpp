@@ -886,6 +886,8 @@ int main(int argc, char** argv) {
             
             // 将 ZED 深度图转换为 OpenCV 格式
             Mat depth_raw(depth_map.getHeight(), depth_map.getWidth(), CV_32FC1, depth_map.getPtr<float>());
+            sl::Mat cf_map; zed.retrieveMeasure(cf_map, sl::MEASURE::CONFIDENCE);
+            Mat conf_raw(cf_map.getHeight(), cf_map.getWidth(), CV_32FC1, cf_map.getPtr<float>());
             Mat depth_undist;
             // 对深度图应用去畸变（与图像去畸变对齐）
             cv::remap(depth_raw, depth_undist, undist_map_x, undist_map_y, cv::INTER_LINEAR);
@@ -993,7 +995,7 @@ int main(int argc, char** argv) {
                     if(ids[i]==BASE_TAG_ID_0) g_px0=sl; else if(ids[i]==BASE_TAG_ID_1) g_px1=sl; else g_px2=sl;
                     // Depth Z at tag center
                     float dz=-1; int px=(int)ctr.x, py=(int)ctr.y;
-                    if(px>=0&&px<depth_undist.cols&&py>=0&&py<depth_undist.rows) dz=depth_undist.at<float>(py,px);
+                    if(px>=0&&px<depth_undist.cols&&py>=0&&py<depth_undist.rows){ dz=depth_undist.at<float>(py,px); float cf=(px>=0&&px<conf_raw.cols&&py>=0&&py<conf_raw.rows)?conf_raw.at<float>(py,px):0; if(cf<50) dz=-1; }
                     if(ids[i]==BASE_TAG_ID_0)g_dz0=dz; else if(ids[i]==BASE_TAG_ID_1)g_dz1=dz; else g_dz2=dz;
                     if(dz>0){ double X=(ctr.x-camera_matrix.at<double>(0,2))*dz/camera_matrix.at<double>(0,0); double Y=(ctr.y-camera_matrix.at<double>(1,2))*dz/camera_matrix.at<double>(1,1); if(ids[i]==BASE_TAG_ID_0){g_dx0=X;g_dy0=Y;} else if(ids[i]==TARGET_TAG_ID){g_dx2=X;g_dy2=Y;} }
                         double ang = acos(fabs(R_tag.at<double>(2,2)))*180/M_PI;
