@@ -1080,7 +1080,7 @@ int main(int argc, char** argv) {
                     // ============================================================
                     // Use depth-based XYZ when available, fall back to PnP
                     double d0x,d0y,d0z,d2x,d2y,d2z;
-                    if(g_dz0>0 && g_dz2>0){ d0x=g_dx0;d0y=g_dy0;d0z=g_dz0/1000.0; d2x=g_dx2;d2y=g_dy2;d2z=g_dz2/1000.0; }
+                    if(g_dz0>0 && g_dz2>0){ d0x=g_dx0/1000.0;d0y=g_dy0/1000.0;d0z=g_dz0/1000.0; d2x=g_dx2/1000.0;d2y=g_dy2/1000.0;d2z=g_dz2/1000.0; }
                     else { d0x=id0_tvec[0];d0y=id0_tvec[1];d0z=id0_tvec[2]; d2x=id2_tvec[0];d2y=id2_tvec[1];d2z=id2_tvec[2]; }
                     Vec3d t_rel_raw_vec(d2x-d0x, d2y-d0y, d2z-d0z);
                     Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
