@@ -994,12 +994,12 @@ int main(int argc, char** argv) {
                     else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; id2_rvec = rv; id2_tvec = tv; }
                     double sl = (norm(corners[i][0]-corners[i][1])+norm(corners[i][1]-corners[i][2])+norm(corners[i][2]-corners[i][3])+norm(corners[i][3]-corners[i][0]))/4.0;
                     if(ids[i]==BASE_TAG_ID_0) g_px0=sl; else if(ids[i]==BASE_TAG_ID_1) g_px1=sl; else g_px2=sl;
-                    double sz=sl*(dz>0?dz:id0_tvec[2]*1000)/camera_matrix.at<double>(0,0);
-                    if(ids[i]==BASE_TAG_ID_0)g_sz0=sz;else if(ids[i]==BASE_TAG_ID_1)g_sz1=sz;else g_sz2=sz;
                     // Depth Z at tag center
                     float dz=-1; int px=(int)ctr.x, py=(int)ctr.y;
                     if(px>=0&&px<depth_undist.cols&&py>=0&&py<depth_undist.rows){ dz=depth_undist.at<float>(py,px); float cf=(px>=0&&px<conf_raw.cols&&py>=0&&py<conf_raw.rows)?conf_raw.at<float>(py,px):0; if(cf<50) dz=-1; }
                     if(ids[i]==BASE_TAG_ID_0)g_dz0=dz; else if(ids[i]==BASE_TAG_ID_1)g_dz1=dz; else g_dz2=dz;
+                    double sz=sl*(dz>0?dz:id0_tvec[2]*1000)/camera_matrix.at<double>(0,0);
+                    if(ids[i]==BASE_TAG_ID_0)g_sz0=sz;else if(ids[i]==BASE_TAG_ID_1)g_sz1=sz;else g_sz2=sz;
                     if(dz>0){ double X=(ctr.x-camera_matrix.at<double>(0,2))*dz/camera_matrix.at<double>(0,0); double Y=(ctr.y-camera_matrix.at<double>(1,2))*dz/camera_matrix.at<double>(1,1); if(ids[i]==BASE_TAG_ID_0){g_dx0=X;g_dy0=Y;} else if(ids[i]==TARGET_TAG_ID){g_dx2=X;g_dy2=Y;} }
                         double ang = acos(fabs(R_tag.at<double>(2,2)))*180/M_PI;
                         if(ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=ang;
