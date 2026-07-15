@@ -28,9 +28,9 @@ using namespace std::chrono_literals;
 // 系统常量配置
 // ============================================================
 // AprilTag 标签尺寸（单位：米）- 必须与实际标签尺寸一致
-const double TAG_SIZE_ID0 = 0.064;  // ID0 基准标签：15厘米
-const double TAG_SIZE_ID1 = 0.064;  // ID1 辅助标签：15厘米
-const double TAG_SIZE_ID2 = 0.064;  // ID2 目标标签：6厘米
+const double TAG_SIZE_ID0 = 0.06;  // ID0 基准标签：15厘米
+const double TAG_SIZE_ID1 = 0.06;  // ID1 辅助标签：15厘米
+const double TAG_SIZE_ID2 = 0.06;  // ID2 目标标签：6厘米
 
 // 标签 ID 定义
 const int BASE_TAG_ID_0 = 0;       // 主基准标签 ID
