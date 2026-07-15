@@ -1417,8 +1417,8 @@ int main(int argc, char** argv) {
             if(id0_found&&id2_found){ Vec3d tp=id2_tvec-id0_tvec; double dp=sqrt(tp[0]*tp[0]+tp[1]*tp[1]+tp[2]*tp[2]); stringstream spp; spp<<fixed<<setprecision(1)<<"PnP: ID2-ID0="<<tp[0]*1000<<" "<<tp[1]*1000<<" "<<tp[2]*1000<<"mm D="<<dp*1000<<"mm"; putText(frame_left,spp.str(),Point(20,img_h/2+20),FONT_HERSHEY_SIMPLEX,0.5,Scalar(0,200,255),2); }
             stringstream spx; spx<<fixed<<setprecision(0)<<"px:ID0="<<g_px0<<" ID1="<<g_px1<<" ID2="<<g_px2<<"  dZ:ID0="<<g_dz0<<" ID1="<<g_dz1<<" ID2="<<g_dz2<<"mm";
             stringstream spp; spp<<fixed<<setprecision(0)<<"PnP_Z: ID0="<<id0_tvec[2]*1000<<" ID1="<<id1_tvec[2]*1000<<" ID2="<<id2_tvec[2]*1000<<"mm";
-            putText(frame_left,spp.str(),Point(20, img_h/2+20),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,200,255),1);
-            putText(frame_left,spx.str(),Point(20, img_h/2),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
+            putText(frame_left,spp.str(),Point(20, img_h/2+50),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,200,255),1);
+            putText(frame_left,spx.str(),Point(20, img_h/2+20),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
             if (id0_found && id1_found && id2_found) {
