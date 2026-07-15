@@ -994,8 +994,7 @@ int main(int argc, char** argv) {
                     else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; id2_rvec = rv; id2_tvec = tv; }
                     double sl = (norm(corners[i][0]-corners[i][1])+norm(corners[i][1]-corners[i][2])+norm(corners[i][2]-corners[i][3])+norm(corners[i][3]-corners[i][0]))/4.0;
                     if(ids[i]==BASE_TAG_ID_0) g_px0=sl; else if(ids[i]==BASE_TAG_ID_1) g_px1=sl; else g_px2=sl;
-                    double cur_dz = (ids[i]==BASE_TAG_ID_0)?g_dz0:((ids[i]==BASE_TAG_ID_1)?g_dz1:g_dz2);
-                    double sz=sl*(cur_dz>0?cur_dz:id0_tvec[2]*1000)/camera_matrix.at<double>(0,0);
+                    double sz=sl*(dz>0?dz:id0_tvec[2]*1000)/camera_matrix.at<double>(0,0);
                     if(ids[i]==BASE_TAG_ID_0)g_sz0=sz;else if(ids[i]==BASE_TAG_ID_1)g_sz1=sz;else g_sz2=sz;
                     // Depth Z at tag center
                     float dz=-1; int px=(int)ctr.x, py=(int)ctr.y;
