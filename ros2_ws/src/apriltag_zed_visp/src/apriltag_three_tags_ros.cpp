@@ -1010,8 +1010,10 @@ int main(int argc, char** argv) {
                     cv::line(frame_left, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
                     cv::circle(frame_left, ctr, 5, axis_color, 2);
                     // Mark TL corner (depth sampling point) with a filled square
-                    putText(frame_left, tag_label, Point(corners[i][0].x, corners[i][0].y - 10),
-                           FONT_HERSHEY_SIMPLEX, 0.5, axis_color, 2);
+                    double pv = (ids[i]==BASE_TAG_ID_0)?g_px0:((ids[i]==BASE_TAG_ID_1)?g_px1:g_px2);
+                    stringstream tlb; tlb<<tag_label<<" "<<fixed<<setprecision(0)<<pv<<"px";
+                    putText(frame_left, tlb.str(), Point(corners[i][0].x, corners[i][0].y - 10),
+                           FONT_HERSHEY_SIMPLEX, 0.45, axis_color, 2);
                 }
 
                 // ============================================================
