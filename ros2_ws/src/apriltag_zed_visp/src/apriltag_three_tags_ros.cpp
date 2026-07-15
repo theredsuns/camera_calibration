@@ -1415,6 +1415,8 @@ int main(int argc, char** argv) {
             // Depth-based camera-frame ID2→ID0
             if(g_dz0>0 && g_dz2>0){ double ddx=g_dx2-g_dx0, ddy=g_dy2-g_dy0, ddz=g_dz2-g_dz0; double dd=sqrt(ddx*ddx+ddy*ddy+ddz*ddz); stringstream sdp; sdp<<fixed<<setprecision(1)<<"dDEP: ID2-ID0="<<ddx<<" "<<ddy<<" "<<ddz<<"mm D="<<dd<<"mm"; putText(frame_left,sdp.str(),Point(20, img_h/2+80),FONT_HERSHEY_SIMPLEX,0.5,Scalar(0,255,255),2); }
             stringstream spx; spx<<fixed<<setprecision(0)<<"px:ID0="<<g_px0<<" ID1="<<g_px1<<" ID2="<<g_px2<<"  dZ:ID0="<<g_dz0<<" ID1="<<g_dz1<<" ID2="<<g_dz2<<"mm";
+            stringstream spp; spp<<fixed<<setprecision(0)<<"PnP_Z: ID0="<<id0_tvec[2]*1000<<" ID1="<<id1_tvec[2]*1000<<" ID2="<<id2_tvec[2]*1000<<"mm";
+            putText(frame_left,spp.str(),Point(20, img_h/2+20),FONT_HERSHEY_SIMPLEX,0.45,Scalar(0,200,255),1);
             putText(frame_left,spx.str(),Point(20, img_h/2),FONT_HERSHEY_SIMPLEX,0.45,Scalar(200,200,0),1);
             // Check if all 3 tag centers are in ROI
             bool in_roi = false;
