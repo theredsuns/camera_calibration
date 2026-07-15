@@ -56,6 +56,7 @@ bool g_ref_ok=false; Vec3d g_ref_t(0,0,0); Mat g_ref_R=Mat::eye(3,3,CV_64F);
 bool g_cap_ready=false;
 double g_dbg_pnpz0 = 0, g_dbg_zedz0 = -1, g_dbg_pnpz2 = 0, g_dbg_zedz2 = -1, g_dbg_zedz1 = -1;
 double g_px0=0, g_px1=0, g_px2=0;
+double g_sz0=0, g_sz1=0, g_sz2=0;
 double g_dz0=-1, g_dz1=-1, g_dz2=-1;
 double g_dx0=0,g_dy0=0,g_dx2=0,g_dy2=0;
 int g_dbg_frame = 0;
@@ -993,6 +994,8 @@ int main(int argc, char** argv) {
                     else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; id2_rvec = rv; id2_tvec = tv; }
                     double sl = (norm(corners[i][0]-corners[i][1])+norm(corners[i][1]-corners[i][2])+norm(corners[i][2]-corners[i][3])+norm(corners[i][3]-corners[i][0]))/4.0;
                     if(ids[i]==BASE_TAG_ID_0) g_px0=sl; else if(ids[i]==BASE_TAG_ID_1) g_px1=sl; else g_px2=sl;
+                    double sz=sl*(g_dz0>0?g_dz0:id0_tvec[2]*1000)/camera_matrix.at<double>(0,0);
+                    if(ids[i]==BASE_TAG_ID_0)g_sz0=sz;else if(ids[i]==BASE_TAG_ID_1)g_sz1=sz;else g_sz2=sz;
                     // Depth Z at tag center
                     float dz=-1; int px=(int)ctr.x, py=(int)ctr.y;
                     if(px>=0&&px<depth_undist.cols&&py>=0&&py<depth_undist.rows){ dz=depth_undist.at<float>(py,px); float cf=(px>=0&&px<conf_raw.cols&&py>=0&&py<conf_raw.rows)?conf_raw.at<float>(py,px):0; if(cf<50) dz=-1; }
@@ -1010,8 +1013,8 @@ int main(int argc, char** argv) {
                     cv::line(frame_left, Point(ctr.x,ctr.y-8), Point(ctr.x,ctr.y+8), axis_color, 2);
                     cv::circle(frame_left, ctr, 5, axis_color, 2);
                     // Mark TL corner (depth sampling point) with a filled square
-                    double pv = (ids[i]==BASE_TAG_ID_0)?g_px0:((ids[i]==BASE_TAG_ID_1)?g_px1:g_px2);
-                    stringstream tlb; tlb<<tag_label<<" "<<fixed<<setprecision(0)<<pv<<"px";
+                    double sv = (ids[i]==BASE_TAG_ID_0)?g_sz0:((ids[i]==BASE_TAG_ID_1)?g_sz1:g_sz2);
+                    stringstream tlb; tlb<<tag_label<<" "<<fixed<<setprecision(0)<<sv<<"mm";
                     putText(frame_left, tlb.str(), Point(corners[i][0].x, corners[i][0].y - 10),
                            FONT_HERSHEY_SIMPLEX, 0.45, axis_color, 2);
                 }
