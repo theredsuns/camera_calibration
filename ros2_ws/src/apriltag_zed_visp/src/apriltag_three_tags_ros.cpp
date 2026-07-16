@@ -1094,7 +1094,7 @@ int main(int argc, char** argv) {
                     Vec3d t_rel_raw_vec(id2_tvec[0] - id0_tvec[0],
                                         id2_tvec[1] - id0_tvec[1],
                                         id2_tvec[2] - id0_tvec[2]);
-                    Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
+                    Mat t_rel_raw = Mat(t_rel_raw_vec); // camera frame
                     // Scale correction: use ID1→ID0 measured distance to fix PnP scale bias
                     if(id1_found) {
                         static double d01_true = 0; static bool d01_set = false;
