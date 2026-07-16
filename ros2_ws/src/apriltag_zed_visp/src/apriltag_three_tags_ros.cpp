@@ -1370,7 +1370,7 @@ int main(int argc, char** argv) {
                     stringstream ss;
                     ss << fixed << setprecision(1);
                     if(!g_d01_ready) putText(frame_left, "CALIB "+to_string(g_d01_n)+"/50", Point(img_w/2-80,30), FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0,255,255), 2);
-                    ss << "L:\" << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
+                    ss << "L: " << sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z)*1000 << "mm"
                        << (assembly_moving ? " [MOV]" : "");
                     putText(frame, ss.str(), Point(20, 30),
                            FONT_HERSHEY_SIMPLEX, 0.7,
