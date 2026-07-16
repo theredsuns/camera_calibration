@@ -1074,7 +1074,7 @@ int main(int argc, char** argv) {
                     Mat R_id2 = rvecToMatrix(id2_rvec);
                     
                     // 如果检测到 ID1，平均 ID0 和 ID1 的旋转（同刚体，噪声抵消）
-                    if (0) { // DISABLED rotation averaging
+                    if (id1_found) {
                         Vec3d rv_avg = (id0_rvec + id1_rvec) * 0.5;
                         R_id0 = rvecToMatrix(rv_avg);  // 使用平均旋转作为参考
                     }
@@ -1085,11 +1085,9 @@ int main(int argc, char** argv) {
                     // 相对平移计算：t_rel = R_id0^T * (t_id2 - t_id0)
                     // 将 ID2 的平移从相机坐标系转换到 ID0 坐标系
                     // ============================================================
-                    // Use depth-based XYZ when available, fall back to PnP
-                    double d0x,d0y,d0z,d2x,d2y,d2z;
-                    if(g_dz0>0 && g_dz2>0){ d0x=g_dx0/1000.0;d0y=g_dy0/1000.0;d0z=g_dz0/1000.0; d2x=g_dx2/1000.0;d2y=g_dy2/1000.0;d2z=g_dz2/1000.0; }
-                    else { d0x=id0_tvec[0];d0y=id0_tvec[1];d0z=id0_tvec[2]; d2x=id2_tvec[0];d2y=id2_tvec[1];d2z=id2_tvec[2]; }
-                    Vec3d t_rel_raw_vec(d2x-d0x, d2y-d0y, d2z-d0z);
+                    Vec3d t_rel_raw_vec(id2_tvec[0] - id0_tvec[0],
+                                        id2_tvec[1] - id0_tvec[1],
+                                        id2_tvec[2] - id0_tvec[2]);
                     Mat t_rel_raw = R_id0.t() * Mat(t_rel_raw_vec);
                     // Scale correction: use ID1→ID0 measured distance to fix PnP scale bias
                     if(id1_found) {
