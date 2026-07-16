@@ -1169,7 +1169,7 @@ int main(int argc, char** argv) {
                     // ============================================================
                     Mat t_rel;
                     if (has_scale) {
-                        t_rel = scale_factor * t_rel_raw;
+                        t_rel = t_rel_raw;
                     } else {
                         t_rel = t_rel_raw.clone();
                     }
