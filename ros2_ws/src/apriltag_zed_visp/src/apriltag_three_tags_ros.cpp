@@ -597,7 +597,7 @@ void printSystemInfo(bool id0_found, bool id1_found, bool id2_found,
         cout << "    X: " << id0_x * 1000 << "  Y: " << id0_y * 1000 << "  Z: " << id0_z * 1000 << endl;
     }
     // 打印 ID1 在相机坐标系中的位置（毫米）
-    if (id1_found) {
+    if (0) {
         cout << "  ID1 相机坐标系 (mm):" << endl;
         cout << "    X: " << id1_x * 1000 << "  Y: " << id1_y * 1000 << "  Z: " << id1_z * 1000 << endl;
     }
@@ -1080,7 +1080,7 @@ int main(int argc, char** argv) {
                     Mat R_id2 = rvecToMatrix(id2_rvec);
                     
                     // 如果检测到 ID1，平均 ID0 和 ID1 的旋转（同刚体，噪声抵消）
-                    if (id1_found) {
+                    if (0) {
                         Vec3d rv_avg = (id0_rvec + id1_rvec) * 0.5;
                         R_id0 = rvecToMatrix(rv_avg);  // 使用平均旋转作为参考
                     }
@@ -1115,7 +1115,7 @@ int main(int argc, char** argv) {
                     // 双路径融合：同时通过 ID0 和 ID1 计算相对位姿，取平均
                     // 原理：两条路径独立，噪声可以抵消
                     // ============================================================
-                    if (id1_found) {
+                    if (0) {
                         Mat R_id1 = rvecToMatrix(id1_rvec);
                         Mat R_rel2 = R_id1.t() * R_id2;
                         Vec3d r1 = matrixToRvec(R_rel);
@@ -1273,7 +1273,7 @@ int main(int argc, char** argv) {
                     // 计算 ID1→ID0 相对位姿（用于相机运动补偿）
                     // ============================================================
                     double r1x=0, r1y=0, r1z=0, r1rx=0, r1ry=0, r1rz=0, r1d=0;
-                    if (id1_found) {
+                    if (0) {
                         Mat R_id0_m = rvecToMatrix(ema_r0);
                         Mat R_id1_m = rvecToMatrix(id1_rvec);
                         // ID1 相对于 ID0 的平移（在 ID0 坐标系下）
@@ -1385,7 +1385,7 @@ int main(int argc, char** argv) {
 
 
                     // ID1→ID0 reference (prominent)
-                    if (id1_found) {
+                    if (0) {
                         double err_mm = fabs(r1d - sqrt(ID0_TO_ID1_X*ID0_TO_ID1_X))*1000;
                         Scalar clr = err_mm<1.0 ? Scalar(0,255,0) : (err_mm<3.0 ? Scalar(0,255,255) : Scalar(0,0,255));
                         stringstream ss3;
