@@ -1102,7 +1102,7 @@ int main(int argc, char** argv) {
                         if(!d01_set) { d01_true = d01_now; d01_set = true; }
                         d01_true = 0.005*d01_now + 0.995*d01_true;
                         double sf = d01_true / d01_now;
-                        if(sf>0.9 && sf<1.1) // t_rel_raw = t_rel_raw * sf; // disabled
+                        // scale correction disabled
                     }
                     // 3-frame median pre-filter on raw relative Z
                     static deque<double> z_pre3(3,0); static int z_pre3_n=0;
