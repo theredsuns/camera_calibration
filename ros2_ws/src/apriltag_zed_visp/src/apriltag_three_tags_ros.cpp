@@ -845,6 +845,12 @@ int main(int argc, char** argv) {
     // ============================================================
     AdvancedFilter relative_filter(60, 0.05);    // ID2→ID0：窗口60帧，EMA=0.05（更稳，响应稍慢）
     AdvancedFilter id1_filter(60, 0.05);         // ID1→ID0：同样参数
+    KalmanFilter1D kf_t0x(0.0001,0.003),kf_t0y(0.0001,0.003),kf_t0z(0.0001,0.003);
+    KalmanFilter1D kf_r0x(0.00001,0.05),kf_r0y(0.00001,0.05),kf_r0z(0.00001,0.05);
+    KalmanFilter1D kf_t1x(0.0001,0.003),kf_t1y(0.0001,0.003),kf_t1z(0.0001,0.003);
+    KalmanFilter1D kf_r1x(0.00001,0.05),kf_r1y(0.00001,0.05),kf_r1z(0.00001,0.05);
+    KalmanFilter1D kf_t2x(0.0001,0.003),kf_t2y(0.0001,0.003),kf_t2z(0.0001,0.003);
+    KalmanFilter1D kf_r2x(0.00001,0.05),kf_r2y(0.00001,0.05),kf_r2z(0.00001,0.05);
 
     // ============================================================
     // 运行时变量
@@ -983,15 +989,15 @@ int main(int argc, char** argv) {
                     else if (ids[i]==TARGET_TAG_ID) g_dbg_zedz2=depth_z;
 
                     // 保存标签位姿
-                    if (ids[i] == BASE_TAG_ID_0) { id0_rvec = rv; id0_tvec = tv; }
-                    else if (ids[i] == BASE_TAG_ID_1) { id1_rvec = rv; id1_tvec = tv; }
+                    if (ids[i] == BASE_TAG_ID_0) { kf_t0x.filter(tv[0]);kf_t0y.filter(tv[1]);kf_t0z.filter(tv[2]); kf_r0x.filter(rv[0]);kf_r0y.filter(rv[1]);kf_r0z.filter(rv[2]); id0_rvec = rv; id0_tvec = tv; }
+                    else if (ids[i] == BASE_TAG_ID_1) { kf_t1x.filter(tv[0]);kf_t1y.filter(tv[1]);kf_t1z.filter(tv[2]); kf_r1x.filter(rv[0]);kf_r1y.filter(rv[1]);kf_r1z.filter(rv[2]); id1_rvec = rv; id1_tvec = tv; }
                     // ZED raw depth at tag center
                     Point2f ctr2(0,0); for(auto& c : corners[i]) ctr2+=c; ctr2*=0.25f;
                     int rx=(int)ctr2.x, ry=(int)ctr2.y;
                     float rd = (rx>=0&&rx<depth_raw.cols&&ry>=0&&ry<depth_raw.rows) ? depth_raw.at<float>(ry,rx) : -1;
                     if (ids[i]==BASE_TAG_ID_0) g_dbg_zedz0=rd;
                     else if (ids[i]==BASE_TAG_ID_1) g_dbg_zedz1=rd;
-                    else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; id2_rvec = rv; id2_tvec = tv; }
+                    else if (ids[i]==TARGET_TAG_ID) { g_dbg_zedz2=rd; kf_t2x.filter(tv[0]);kf_t2y.filter(tv[1]);kf_t2z.filter(tv[2]); kf_r2x.filter(rv[0]);kf_r2y.filter(rv[1]);kf_r2z.filter(rv[2]); id2_rvec = rv; id2_tvec = tv; }
                     double sl = (norm(corners[i][0]-corners[i][1])+norm(corners[i][1]-corners[i][2])+norm(corners[i][2]-corners[i][3])+norm(corners[i][3]-corners[i][0]))/4.0;
                     if(ids[i]==BASE_TAG_ID_0) g_px0=sl; else if(ids[i]==BASE_TAG_ID_1) g_px1=sl; else g_px2=sl;
                     // Depth Z at tag center
