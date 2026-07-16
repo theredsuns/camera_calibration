@@ -1358,8 +1358,9 @@ int main(int argc, char** argv) {
 
                     // ============================================================
                     // Capture for log (after all corrections applied)
-                    g_cap_x=corr_x; g_cap_y=corr_y; g_cap_z=corr_z; g_cap_rx=corr_rx; g_cap_ry=corr_ry; g_cap_rz=corr_rz;
-                    g_cap_d=sqrt(corr_x*corr_x+corr_y*corr_y+corr_z*corr_z);
+                    g_cap_x=id2_tvec[0]-id0_tvec[0]; g_cap_y=id2_tvec[1]-id0_tvec[1]; g_cap_z=id2_tvec[2]-id0_tvec[2];
+                    g_cap_rx=corr_rx; g_cap_ry=corr_ry; g_cap_rz=corr_rz;
+                    g_cap_d=sqrt(g_cap_x*g_cap_x+g_cap_y*g_cap_y+g_cap_z*g_cap_z);
                     if(id1_found){g_cap_r1x=r1x;g_cap_r1y=r1y;g_cap_r1z=r1z;g_cap_r1rx=r1rx;g_cap_r1ry=r1ry;g_cap_r1rz=r1rz;g_cap_r1d=r1d;g_cap_ready=true;}
 
                     // 图像显示：绘制位姿信息
