@@ -1102,7 +1102,7 @@ int main(int argc, char** argv) {
                         if(!d01_set) { d01_true = d01_now; d01_set = true; }
                         d01_true = 0.005*d01_now + 0.995*d01_true;
                         double sf = d01_true / d01_now;
-                        if(sf>0.9 && sf<1.1) t_rel_raw = t_rel_raw * sf;
+                        if(sf>0.9 && sf<1.1) // t_rel_raw = t_rel_raw * sf; // disabled
                     }
                     // 3-frame median pre-filter on raw relative Z
                     static deque<double> z_pre3(3,0); static int z_pre3_n=0;
@@ -1129,7 +1129,7 @@ int main(int argc, char** argv) {
                         t2.at<double>(0) += ID0_TO_ID1_X;
                         t2.at<double>(1) += ID0_TO_ID1_Y;
                         t2.at<double>(2) += ID0_TO_ID1_Z;
-                        t_rel_raw = (t_rel_raw + t2) * 0.5;  // 平均平移
+                        // t_rel_raw = (t_rel_raw + t2) * 0.5; // disabled  // 平均平移
                     }
 
                     // ============================================================
