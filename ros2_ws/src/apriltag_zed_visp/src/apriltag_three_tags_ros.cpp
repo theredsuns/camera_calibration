@@ -1377,11 +1377,6 @@ int main(int argc, char** argv) {
                            assembly_moving ? Scalar(0, 255, 0) : Scalar(0, 255, 255), 2);
 
                     // 显示坐标值
-                    stringstream ss2;
-                    ss2 << "XYZ=" << corr_x*1000 << " " << corr_y*1000 << " " << corr_z*1000
-                        << "mm  R=" << corr_rx*180/M_PI << " " << corr_ry*180/M_PI << " " << corr_rz*180/M_PI << "deg";
-                    putText(frame_left, ss2.str(), Point(20, 55),
-                           FONT_HERSHEY_SIMPLEX, 0.45, Scalar(255, 255, 0), 2);
 
 
                     // ID1→ID0 reference (prominent)
